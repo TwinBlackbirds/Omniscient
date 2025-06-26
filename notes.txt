@@ -1,0 +1,5 @@
+-- Ideas
+
+* Spider process which grabs links
+* Dispatcher which spawns distributes urls and spawns children processes to scrape information
+* Scraper processes which run async

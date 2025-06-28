@@ -251,8 +251,8 @@ public class App
     private static boolean isUrlWiki(String url) {
     	for (String frag : BANNED_URL_FRAGMENTS) {
     		if (url.contains(frag)) return false;
-    		if (!url.contains("wikipedia.org")) return false;
     	}
+    	if (!url.contains("wikipedia.org")) return false;
     	return true;
     }
     

@@ -39,7 +39,7 @@ import tbb.utils.Printer.State;
 public class App 
 {
 	// configuration
-	private static Logger log = new Logger(LogLevel.ERROR); // min log level
+	private static Logger log = new Logger(LogLevel.INFO); // min log level
 	private static final ConfigPayload config = new Configurator(log).getData();
 	
 	// consts
@@ -99,20 +99,18 @@ public class App
     	
     	
     	// end-user feedback
-    	Printer.startBox("Omniscient");
+//    	Printer.startBox("Omniscient");
     	// TODO: add how long the program has been running for in box TUI
     	// TODO: also add how many urls have been grabbed and how many articles have been extracted
     	
-    	// String s = loopUntilInput();
     	try {
-    		// only enable while loop once you are confident in the bot's abilities
-    		while (true) {
+//    		while (true) {
             	bot(ARTICLES_PER_CHILD * MAX_CHILDREN); 
             	dispatch();
             	try {
             		Thread.sleep(5000);
             	} catch (Exception e) {};
-    		}
+//    		}
     	} catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Bot failed! " + e);
     	} finally {
@@ -151,21 +149,15 @@ public class App
     	}
     }
     
-    // clean urls, split them up, and dispatch them to children processes
     private static void dispatch() throws Exception {
-    	// --- overview:
-    	// split URL list into chunks
-    	// spawn child processes to collect data from the URLs
-    	// block thread until all processes return
     	
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
     	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
-    	// give each child MAX_ARTICLES / 10 
     	
     	sendState(State.COLLECTING);
     	List<Future<?>> tasks = new ArrayList<>();
 
-        // May have to lock access to currentLinks
+    	// create tasks
         while (!currentLinks.isEmpty()) {
             String[] urls = grabRange(ARTICLES_PER_CHILD);
             if (urls.length > 0) {
@@ -191,7 +183,6 @@ public class App
             }
         }
         
-    	currentLinks.clear(); // clear l1 cache, l2 cache is unaffected (allLinks)
     	sendState(State.WAITING);
     }
     
@@ -200,13 +191,16 @@ public class App
     // Share one chrome driver between many scrapers and just open new tabs perhaps?
     private static void scraper(String[] urls) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
+    	// TODO: write collector agent
     }
     
     public static String[] grabRange(int amount) {
     	
     	int lastIdx = currentLinks.size() - 1;
     	if (amount >= lastIdx) { // we are at the end
-    		return currentLinks.toArray(new String[0]);
+    		String[] range = currentLinks.toArray(new String[0]);
+    		currentLinks.clear();
+    		return range;
     	}
     	
         ArrayList<String> newList = new ArrayList<String>();
@@ -215,6 +209,7 @@ public class App
     	while (pop != null && count < amount)  {
         	newList.add(pop);
     		pop = currentLinks.poll();
+    		count++;
         }   
     	return newList.toArray(new String[0]);
     }

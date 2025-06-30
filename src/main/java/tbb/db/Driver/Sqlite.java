@@ -51,6 +51,18 @@ public class Sqlite {
 		this.db = config.buildSessionFactory();
 	}
 	
+	public boolean findWiki(String id) {
+		try (Session s = db.openSession()){ // try-with-resources
+			Wiki o = s.find(Wiki.class, id);
+			if (o != null) {
+				return true;
+			}
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "findWikiByUrl operation failed! " + e);
+		}
+		return false;
+	}
+	
 	public void writeWiki(Wiki w) throws Exception {
 		try (Session s = db.openSession()){ // try-with-resources
 			s.beginTransaction();

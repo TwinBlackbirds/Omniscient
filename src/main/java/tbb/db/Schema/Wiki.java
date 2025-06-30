@@ -6,11 +6,8 @@ import jakarta.persistence.*;
 @Table(name = "wikis")
 public class Wiki {
 	@Id
-	@GeneratedValue(strategy = GenerationType.UUID)
+	@Column (name= "id", nullable = false)
 	public String id;
-	
-	@Column(name = "url", nullable = false, unique = true)
-	public String url;
 	
 	@Column(name = "title", nullable = false)
 	public String title;

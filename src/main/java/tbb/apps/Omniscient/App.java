@@ -41,8 +41,8 @@ public class App
 	private static final int MAX_RETRIES = 3; // if page fails to load (cd.get())
 	private static final int TIMEOUT_SEC = 30; // time to wait for el to be present
 	private static final int EXTRA_WAIT_MS = 1000; // extra time spent waiting after el is present
-	private static final int MAX_CHILDREN = 1; //10; // amount of child procs dispatch() is allowed to spawn
-	private static final int ARTICLES_PER_CHILD = 50; //500;
+	private static final int MAX_CHILDREN = 10; //10; // amount of child procs dispatch() is allowed to spawn
+	private static final int ARTICLES_PER_CHILD = 500; //500;
 	
 	// url handling
 	private static final String[] BANNED_URL_FRAGMENTS = {
@@ -53,7 +53,8 @@ public class App
 			"/wiki/File:",
 			"/wiki/Template:",
 			"/wiki/Template_talk:",
-			"/wiki/Portal:"
+			"/wiki/Portal:",
+			"/wiki/Talk:"
 	};
 	
 	private static final String[] BANNED_TEXT_CHUNKS = {
@@ -67,6 +68,7 @@ public class App
 	
 	private static ConcurrentLinkedQueue<String> allLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> currentLinks = new ConcurrentLinkedQueue<String>();
+	private static ConcurrentLinkedQueue<String> visitedLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
 	private static Sqlite sql = new Sqlite(log, true);
@@ -124,17 +126,18 @@ public class App
     private static void bot(WebDriver cd, int amtOfLinks) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
     	int startingSize = allLinks.size();
-    	navigateTo(cd, "https://en.wikipedia.org");
+    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
     	while (allLinks.size() < startingSize + amtOfLinks) {
     		// collect links
     		// TODO: improve duplicate detection
+    		log.Write(LogLevel.INFO, "Collecting URLs on page");
         	List<String> links = getUniqueValidLinks(cd);
         	currentLinks.addAll(links);
         	
         	int count = 0;
         	String link = links.getFirst();
         	// find next valid page
-        	while (sql.findWiki(link)) {
+        	while (visitedLinks.contains(link) || sql.findWiki(link)) {
         		count++;
         		link = links.get(count);
         	}
@@ -334,6 +337,7 @@ public class App
     private static void navigateTo(WebDriver driver, String URL) {
     	sendState(driver, State.NAVIGATING);
     	driver.get(URL);
+    	visitedLinks.add(URL);
     	waitUntilPageLoaded(driver);
     }
     

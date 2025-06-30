@@ -9,7 +9,7 @@ public class Wiki {
 	@GeneratedValue(strategy = GenerationType.UUID)
 	public String id;
 	
-	@Column(name = "url", nullable = false)
+	@Column(name = "url", nullable = false, unique = true)
 	public String url;
 	
 	@Column(name = "title", nullable = false)

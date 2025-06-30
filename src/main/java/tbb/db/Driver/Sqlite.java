@@ -5,7 +5,7 @@
 package tbb.db.Driver;
 
 // database table objects
-import tbb.db.Schema.Channel;
+import tbb.db.Schema.Wiki;
 import tbb.utils.Logger.LogLevel;
 import tbb.utils.Logger.Logger;
 
@@ -51,14 +51,13 @@ public class Sqlite {
 		this.db = config.buildSessionFactory();
 	}
 	
-	// example write method
-	public void writeChannel(Channel c) throws Exception {
+	public void writeWiki(Wiki w) throws Exception {
 		try (Session s = db.openSession()){ // try-with-resources
 			s.beginTransaction();
-			s.persist(c);
+			s.persist(w);
 			s.getTransaction().commit();
 		} catch (Exception e) {
-			log.Write(LogLevel.ERROR, "WriteChannel operation failed! " + e);
+			log.Write(LogLevel.ERROR, "WriteWiki operation failed! " + e);
 		}
 	}
 }

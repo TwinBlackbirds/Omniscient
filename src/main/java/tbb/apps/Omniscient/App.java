@@ -52,7 +52,8 @@ public class App
 			"/wiki/Category:",
 			"/wiki/File:",
 			"/wiki/Template:",
-			"/wiki/Template_talk:"
+			"/wiki/Template_talk:",
+			"/wiki/Portal:"
 	};
 	
 	private static final String[] BANNED_TEXT_CHUNKS = {
@@ -64,7 +65,7 @@ public class App
 			".mw-heading + ul",
 	};
 	
-	private static List<String> allLinks = new ArrayList<String>();
+	private static ConcurrentLinkedQueue<String> allLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> currentLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
@@ -73,64 +74,71 @@ public class App
 	// selenium browser tools
 	private static ChromeOptions co = null;
 	private static ChromeDriverService cds = null;
-	private static ChromeDriver cd;
-	private static JavascriptExecutor js; // to execute JS in browser context
 	
 	
     public static void main( String[] args )
     {
-    	cd = makeChromeInstance();
-    	js = (JavascriptExecutor) cd;
-    	
-    	
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
     	// TODO: add how long the program has been running for in box TUI
     	// TODO: also add how many urls have been grabbed and how many articles have been extracted
     	
     	try {
-//    		while (true) {
-            	bot(ARTICLES_PER_CHILD * MAX_CHILDREN); 
-            	dispatch();
-            	try {
-            		Thread.sleep(5000);
-            	} catch (Exception e) {};
-//    		}
+    		handleBots();
     	} catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Bot failed! " + e);
     	} finally {
+		    log.close();
+	        System.out.println("Process terminated with return code 0");	
+    	}
+    	
+    }
+    private static void handleBots() {
+    	WebDriver cd = null;
+    	try {
+    		cd = makeChromeInstance();
+        	bot(cd, ARTICLES_PER_CHILD * MAX_CHILDREN); 		
+    	} catch (Exception e) {
+    		log.Write(LogLevel.ERROR, "Spider failed! " + e);
+    	} finally {
     		log.Write(LogLevel.INFO, "Closing Chrome browser");
             // close browser + all tabs
-            cd.quit();
-            // dump logs
-            log.close();
-            System.out.println("Process terminated with return code 0");
-        		
+            if (cd != null) cd.quit();
     	}
+    	
+    	try {
+    		Thread.sleep(3000);	
+    	} catch (Exception e) {}
+    	
+    	try {
+    		dispatch();
+    	} catch (Exception e) {
+    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
+    	}
+    	// TODO: alternative method of duplicate removal
+    	// all scrapers have their own list of URLS
+    	// then they consolidate every so often, checking for dupes
     }
     
     // our 'spider'
-    private static void bot(int amtOfLinks) throws Exception {
+    private static void bot(WebDriver cd, int amtOfLinks) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
-    	int startingIdx;
-    	String navTo;
-    	
-    	if (allLinks.size() < 1) {
-    		startingIdx = 0;
-    		navTo = "https://en.wikipedia.org"; // 'starting article' ability later on
-    	} else {
-    		startingIdx = allLinks.size()-1;
-    		navTo = allLinks.get(startingIdx);
-    	}
-    	int count = 0;
-    	
-    	while (allLinks.size() < startingIdx + amtOfLinks) {
-    		navigateTo(navTo);
-        	List<String> links = getUniqueValidLinks();
-        	allLinks.addAll(links);
+    	int startingSize = allLinks.size();
+    	navigateTo(cd, "https://en.wikipedia.org");
+    	while (allLinks.size() < startingSize + amtOfLinks) {
+    		// collect links
+    		// TODO: improve duplicate detection
+        	List<String> links = getUniqueValidLinks(cd);
         	currentLinks.addAll(links);
-        	navTo = allLinks.get(startingIdx + count);
-        	count++;
+        	
+        	int count = 0;
+        	String link = links.getFirst();
+        	// find next valid page
+        	while (sql.findWiki(link)) {
+        		count++;
+        		link = links.get(count);
+        	}
+        	navigateTo(cd, link);
     	}
     }
     
@@ -139,7 +147,6 @@ public class App
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
     	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
     	
-    	sendState(State.COLLECTING);
     	List<Future<?>> tasks = new ArrayList<>();
 
     	// create tasks
@@ -147,16 +154,25 @@ public class App
             String[] urls = grabRange(ARTICLES_PER_CHILD);
             if (urls.length > 0) {
                 tasks.add(es.submit(() -> {
-                	WebDriver tab = makeChromeInstance();
+                	WebDriver cd = null;
+                	while (cd == null) {
+                		try {
+                			cd = makeChromeInstance();
+                		} catch (Exception e) {
+                			log.Write(LogLevel.ERROR, "Failed to start browser! Retrying..");
+                			try {Thread.sleep(5000);} catch (Exception ex) {}
+                		}
+                	}
                 	try {
-                        scraper(tab, urls);
+                        scraper(cd, urls);
                     } catch (Exception e) {
-                        log.Write(LogLevel.ERROR, "Could not dispatch! " + e);
+                        log.Write(LogLevel.ERROR, "Scraper failed! " + e);
                     } finally {
-                    	tab.quit();
+                    	cd.quit();
                     }
                 }));
             }
+            Thread.sleep(3000); // stagger tasks
         }
 
         es.shutdown();
@@ -171,7 +187,6 @@ public class App
             }
         }
         
-    	sendState(State.WAITING);
     }
     
     // this is the child process which scrapes a wiki 
@@ -181,8 +196,8 @@ public class App
     	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
     	for (String url : urls) {
     		navigateTo(tab, url);
-    		
-    		sendState(State.COLLECTING);
+    		log.Write(LogLevel.INFO, "Collecting data from page");
+    		sendState(tab, State.COLLECTING);
     		// collect main body of text from page
     		WebElement mainChunk = tab.findElement(By.cssSelector("div.mw-content-ltr"));
     		String mainText = mainChunk.getText();
@@ -195,7 +210,7 @@ public class App
     		
     		// get infobox text separately for data integrity
     		boolean hasInfoBox = (tab.findElements(By.cssSelector("table.infobox")).size() > 0);
-    		String infoBoxText = "";
+    		String infoBoxText = null;
     		if (!hasInfoBox) {
     			log.Write(LogLevel.WARN, "No infobox located on the page " + tab.getCurrentUrl());
     		} else {
@@ -217,28 +232,38 @@ public class App
     		if (hasInfoBox) mainText = mainText.replace(infoBoxText, "");
     		
     		// remove the extra bad-quality data left behind
-    		if (mainText.contains("Notes\n\n")) {
-    			mainText = mainText.split("Notes\n\n")[0];
-    		} else if (mainText.contains("References\n\n")) {
-    			mainText = mainText.split("References\n\n")[0];
+    		if (mainText.contains("Notes ?(\\[edit\\])?\n\n")) {
+    			mainText = mainText.split("Notes ?(\\[edit\\])?\n\n")[0];
+    		} else if (mainText.contains("References ?(\\[edit\\])?\n\n")) {
+    			mainText = mainText.split("References ?(\\[edit\\])?\n\n")[0];
     		}
     		
     		WebElement titleEl = tab.findElement(By.cssSelector("main h1"));
     		
     		// create our wiki object
     		Wiki w = new Wiki();
-    		w.url = tab.getCurrentUrl();
+    		w.id = tab.getCurrentUrl();
     		w.title = titleEl.getText();
     		w.content = mainText;
     		w.infoBoxContent = infoBoxText;
     		w.links = sb.toString();
-    		log.Write(LogLevel.INFO, "collected data : " + url); 
+    		
+    		if (w.content.trim() == "" || w.title.trim() == "") {
+    			log.Write(LogLevel.ERROR, "Could not extract data for page " + w.id);
+    			sendState(tab, State.WAITING);
+    			continue;
+    		}
+    		log.Write(LogLevel.INFO, "Collected data : " + w.title); 
     		
     		// send it to database
-    		sql.writeWiki(w);
-    		log.Write(LogLevel.INFO, "wrote data to database : " + url); 
+    		if (sql.findWiki(w.id)) { // extra layer of duplicate protection
+    			log.Write(LogLevel.WARN, "Skipping duplicate entry " + w.id);
+    			continue;
+    		}
+    		sql.writeWiki(w);	
+    		log.Write(LogLevel.INFO, "Wrote data to database : " + w.title); 
     		
-    		sendState(State.WAITING);
+    		sendState(tab, State.WAITING);
     	}
     }
     
@@ -291,36 +316,30 @@ public class App
     	return newList.toArray(new String[0]);
     }
     
-    
-    private static List<String> getUniqueValidLinks() {
-    	return getUniqueValidLinks(cd);
-    }
     private static List<String> getUniqueValidLinks(WebDriver driver) {
-    	sendState(State.COLLECTING);
+    	sendState(driver, State.COLLECTING);
     	List<WebElement> links = driver.findElements(By.cssSelector("div.mw-content-ltr a[href*='/wiki']"));
     	ArrayList<String> hrefs = new ArrayList<String>();
     	for (WebElement link : links) {
     		String href = link.getAttribute("href");
     		if (isUrlEnglish(href) && isUrlWiki(href) && !allLinks.contains(href)) {
     			hrefs.add(href);
+    			allLinks.add(href);
     		}
     	}
-    	sendState(State.WAITING);
+    	sendState(driver, State.WAITING);
     	return hrefs;
     }
     
-    private static void navigateTo(String URL) {
-    	navigateTo(cd, URL);
-    }
     private static void navigateTo(WebDriver driver, String URL) {
-    	sendState(State.NAVIGATING);
+    	sendState(driver, State.NAVIGATING);
     	driver.get(URL);
     	waitUntilPageLoaded(driver);
     }
     
     // wait for TIMEOUT_SEC seconds OR until the DOM reports readyState = complete
     private static void waitUntilPageLoaded(WebDriver driver) {
-    	sendState(State.LOADING);
+    	sendState(driver, State.LOADING);
     	String pageName = driver.getTitle();
     	log.Write(LogLevel.INFO, String.format("Waiting for page '%s' to load", pageName));
     	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
@@ -329,7 +348,7 @@ public class App
                     .equals("complete")
             );
     	log.Write(LogLevel.INFO, "Page loaded");
-    	sendState(State.WAITING);
+    	sendState(driver, State.WAITING);
     }
     
     private static boolean isUrlWiki(String url) {
@@ -344,9 +363,6 @@ public class App
     	return (ensureSchema(url, false).startsWith("en.") ? true : false);
     }
     
-    private static void sendState(State state) {
-    	sendState(cd, state);
-    }
     private static void sendState(WebDriver driver, State state) {
     	String cleanURL = ensureSchema(driver.getCurrentUrl(), false);
     	if (cleanURL.startsWith("data")) { // browser just started
@@ -358,20 +374,6 @@ public class App
     	}
     	cleanURL = cleanURL.split("/")[0];
     	Printer.sh.update(state, cleanURL);
-    }
-    
-    private static void jsClick(WebElement el) {
-    	js.executeScript("arguments[0].click();", el);
-    }
-    
-    private static void scrollPage(int scrolls) {
-    	sendState(State.LOADING);
-    	for (int i = 0; i < scrolls; i++) {
-    		js.executeScript(String.format("window.scrollBy(0, %d);", 1080*i), "");
-    		try { Thread.sleep(1000); } catch (InterruptedException e) { }
-    	}
-    	js.executeScript("window.scrollTo(0, 0);",  "");
-    	sendState(State.WAITING);
     }
     
     private static String ensureSchema(String url, boolean giveSchemaBack) {
@@ -389,25 +391,25 @@ public class App
     }
     
     private static void waitForElementClickable(WebDriver driver, String selector) {
-    	sendState(State.LOADING);
+    	sendState(driver, State.LOADING);
     	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
 		    ExpectedConditions.elementToBeClickable(By.cssSelector(selector))
 		);
     	try {
     		Thread.sleep(EXTRA_WAIT_MS);
     	} catch (Exception e) { }
-    	sendState(State.WAITING);
+    	sendState(driver, State.WAITING);
 	}
     
     private static void waitForElementVisible(WebDriver driver, String selector) {
-    	sendState(State.LOADING);
+    	sendState(driver, State.LOADING);
     	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
 		    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(selector))
 		);
     	try {
     		Thread.sleep(EXTRA_WAIT_MS);
     	} catch (Exception e) { }
-    	sendState(State.WAITING);
+    	sendState(driver, State.WAITING);
 	}
 }
 

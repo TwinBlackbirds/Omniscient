@@ -227,6 +227,7 @@ public class App
     		
     		// create our wiki object
     		Wiki w = new Wiki();
+    		w.url = tab.getCurrentUrl();
     		w.title = titleEl.getText();
     		w.content = mainText;
     		w.infoBoxContent = infoBoxText;

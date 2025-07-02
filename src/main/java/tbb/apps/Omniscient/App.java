@@ -209,7 +209,7 @@ public class App
     		log.Write(LogLevel.INFO, "Collecting data from page");
     		sendState(tab, State.COLLECTING);
     		// collect main body of text from page
-    		WebElement mainChunk = tab.findElement(By.cssSelector("div.mw-content-ltr"));
+    		WebElement mainChunk = tab.findElement(By.cssSelector("div[class*='mw-content-ltr']"));
     		String mainText = mainChunk.getText();
     		
     		// grab text of stuff we want to separate

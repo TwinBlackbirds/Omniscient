@@ -14,11 +14,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Pattern;
 
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeDriverService;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.remote.UnreachableBrowserException;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -41,8 +43,8 @@ public class App
 	private static final int MAX_RETRIES = 3; // if page fails to load (cd.get())
 	private static final int TIMEOUT_SEC = 30; // time to wait for el to be present
 	private static final int EXTRA_WAIT_MS = 1000; // extra time spent waiting after el is present
-	private static final int MAX_CHILDREN = 10; //10; // amount of child procs dispatch() is allowed to spawn
-	private static final int ARTICLES_PER_CHILD = 500; //500;
+	private static final int MAX_CHILDREN = 8; //10; // amount of child procs dispatch() is allowed to spawn
+	private static final int ARTICLES_PER_CHILD = 125000; //500;
 	
 	// url handling
 	private static final String[] BANNED_URL_FRAGMENTS = {
@@ -66,16 +68,17 @@ public class App
 			".mw-heading + ul",
 	};
 	
+	private static final Pattern splitPatt = Pattern.compile("(Notes|References) ?(\\[edit\\])?\n\n");
+	
 	private static ConcurrentLinkedQueue<String> allLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> currentLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> visitedLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
-	private static Sqlite sql = new Sqlite(log, true);
+	private static Sqlite sql = new Sqlite(log, false);
 	
 	// selenium browser tools
 	private static ChromeOptions co = null;
-	private static ChromeDriverService cds = null;
 	
 	
     public static void main( String[] args )
@@ -126,7 +129,13 @@ public class App
     private static void bot(WebDriver cd, int amtOfLinks) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
     	int startingSize = allLinks.size();
-    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
+    	Wiki recent = sql.getLastWiki();
+    	if (recent == null) {
+    		navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
+    	} else {
+    		navigateTo(cd, recent.id);
+    	}
+    	
     	while (allLinks.size() < startingSize + amtOfLinks) {
     		// collect links
     		// TODO: improve duplicate detection
@@ -184,19 +193,17 @@ public class App
         for (Future<?> task : tasks) {
             try {
                 task.get(); // this blocks until that specific task finishes
+                Thread.sleep(10000); // polling time
             } catch (ExecutionException | InterruptedException e) {
                 log.Write(LogLevel.ERROR, "Task failed: " + e.getMessage());
-                Thread.currentThread().interrupt();
-            }
+                task.cancel(true);
+            } catch (UnreachableBrowserException e) {}
         }
         
     }
     
-    // this is the child process which scrapes a wiki 
-    // TODO: figure out a plan of action for how to control the chrome driver without too much resource hogging
-    // Share one chrome driver between many scrapers and just open new tabs perhaps?
     private static void scraper(WebDriver tab, String[] urls) throws Exception {
-    	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
+     	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
     	for (String url : urls) {
     		navigateTo(tab, url);
     		log.Write(LogLevel.INFO, "Collecting data from page");
@@ -234,12 +241,9 @@ public class App
     		}
     		if (hasInfoBox) mainText = mainText.replace(infoBoxText, "");
     		
+    		
     		// remove the extra bad-quality data left behind
-    		if (mainText.contains("Notes ?(\\[edit\\])?\n\n")) {
-    			mainText = mainText.split("Notes ?(\\[edit\\])?\n\n")[0];
-    		} else if (mainText.contains("References ?(\\[edit\\])?\n\n")) {
-    			mainText = mainText.split("References ?(\\[edit\\])?\n\n")[0];
-    		}
+    		mainText = splitPatt.split(mainText)[0];
     		
     		WebElement titleEl = tab.findElement(By.cssSelector("main h1"));
     		
@@ -288,15 +292,10 @@ public class App
         	if (headless) { cOpts.addArguments("headless"); }
         	co = cOpts;
     	}
-    	if (cds == null) {
-    		// point selenium to correct driver
-        	log.Write(LogLevel.DBG, "Creating default ChromeDriverService");
-        	cds = ChromeDriverService.createDefaultService();
-    	}
     	
     	// start driver
     	log.Write(LogLevel.INFO, "Starting Chrome browser instance");
-    	return new ChromeDriver(cds, co);
+    	return new ChromeDriver(ChromeDriverService.createDefaultService(), co);
     }
     
     public static String[] grabRange(int amount) {

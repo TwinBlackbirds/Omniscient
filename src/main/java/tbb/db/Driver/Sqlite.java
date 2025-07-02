@@ -62,6 +62,25 @@ public class Sqlite {
 		}
 		return false;
 	}
+	public int countWikis() {
+		try (Session s = db.openSession()){ // try-with-resources
+			return s.createNativeQuery("SELECT COUNT(*) from wikis", int.class).getSingleResult();
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "countWikis operation failed! " + e);
+		}
+		return 0;
+	}
+	
+	public Wiki getLastWiki() {
+		try (Session s = db.openSession()){ // try-with-resources
+			return s.createQuery("FROM Wiki ORDER BY timeCollected DESC", Wiki.class)
+	                .setMaxResults(1)
+	                .uniqueResult();
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "getLastWiki operation failed! " + e);
+		}
+		return null;
+	}
 	
 	public void writeWiki(Wiki w) throws Exception {
 		try (Session s = db.openSession()){ // try-with-resources

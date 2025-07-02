@@ -1,5 +1,7 @@
 package tbb.db.Schema;
 
+import java.time.LocalDateTime;
+
 import jakarta.persistence.*;
 
 @Entity
@@ -20,6 +22,9 @@ public class Wiki {
 	
 	@Column(name = "links", nullable = true)
 	public String links;
+	
+	@Column (name = "time_collected", nullable = false)
+	public LocalDateTime timeCollected = LocalDateTime.now();
 	
 	public Wiki() {}
 }

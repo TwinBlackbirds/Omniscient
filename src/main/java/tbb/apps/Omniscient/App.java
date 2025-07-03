@@ -146,7 +146,8 @@ public class App
         	int count = 0;
         	String link = links.getFirst();
         	// find next valid page
-        	while (visitedLinks.contains(link) || sql.findWiki(link)) {
+        	// db operation is expensive that is why it is not done in getUniqueValidLinks
+        	while (visitedLinks.contains(link) || sql.findWiki(link)) { 
         		count++;
         		link = links.get(count);
         	}
@@ -206,6 +207,10 @@ public class App
      	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
     	for (String url : urls) {
     		navigateTo(tab, url);
+    		if (sql.findWiki(tab.getCurrentUrl())) { // extra layer of duplicate protection
+    			log.Write(LogLevel.WARN, "Skipping duplicate entry " + tab.getCurrentUrl());
+    			continue;
+    		}
     		log.Write(LogLevel.INFO, "Collecting data from page");
     		sendState(tab, State.COLLECTING);
     		// collect main body of text from page
@@ -263,10 +268,6 @@ public class App
     		log.Write(LogLevel.INFO, "Collected data : " + w.title); 
     		
     		// send it to database
-    		if (sql.findWiki(w.id)) { // extra layer of duplicate protection
-    			log.Write(LogLevel.WARN, "Skipping duplicate entry " + w.id);
-    			continue;
-    		}
     		sql.writeWiki(w);	
     		log.Write(LogLevel.INFO, "Wrote data to database : " + w.title); 
     		

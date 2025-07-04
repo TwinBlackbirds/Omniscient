@@ -44,7 +44,12 @@ public class App
 	private static final int TIMEOUT_SEC = 30; // time to wait for el to be present
 	private static final int EXTRA_WAIT_MS = 1000; // extra time spent waiting after el is present
 	private static final int MAX_CHILDREN = 8; //10; // amount of child procs dispatch() is allowed to spawn
-	private static final int ARTICLES_PER_CHILD = 125000; //500;
+	private static final int TOTAL_ARTICLES = 100000; //500;
+	private static final int PARTITION_COUNT = 10;
+	
+	// calculated consts
+	private static final int PARTITION_SIZE = (int)Math.ceil(TOTAL_ARTICLES/PARTITION_COUNT);
+	private static final int BLOCK_SIZE = (int)Math.ceil(PARTITION_SIZE / MAX_CHILDREN);
 	
 	// url handling
 	private static final String[] BANNED_URL_FRAGMENTS = {
@@ -75,7 +80,7 @@ public class App
 	private static ConcurrentLinkedQueue<String> visitedLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
-	private static Sqlite sql = new Sqlite(log, false);
+	private static Sqlite sql = new Sqlite(log, false); // boolean = debug mode (delete db)
 	
 	// selenium browser tools
 	private static ChromeOptions co = null;
@@ -87,11 +92,11 @@ public class App
 //    	Printer.startBox("Omniscient");
     	// TODO: add how long the program has been running for in box TUI
     	// TODO: also add how many urls have been grabbed and how many articles have been extracted
-    	
+    	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
     		handleBots();
     	} catch (Exception e) {
-    		log.Write(LogLevel.ERROR, "Bot failed! " + e);
+    		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
     	} finally {
 		    log.close();
 	        System.out.println("Process terminated with return code 0");	
@@ -100,30 +105,59 @@ public class App
     }
     private static void handleBots() {
     	WebDriver cd = null;
-    	try {
-    		cd = makeChromeInstance();
-        	bot(cd, ARTICLES_PER_CHILD * MAX_CHILDREN); 		
-    	} catch (Exception e) {
-    		log.Write(LogLevel.ERROR, "Spider failed! " + e);
-    	} finally {
-    		log.Write(LogLevel.INFO, "Closing Chrome browser");
-            // close browser + all tabs
-            if (cd != null) cd.quit();
-    	}
+    	// do it in 8 chunks
+    	for (int i = 0; i < PARTITION_COUNT; i++) {
+    		try {
+	    		cd = makeChromeInstance();
+	    		bot(cd, PARTITION_SIZE); 	
+	    		log.Write(LogLevel.INFO, "Exiting spider (round " + (i+1) + "/" + PARTITION_COUNT + ")");
+	    		cd.quit(); cd = null;
+	    	} catch (Exception e) {
+	    		log.Write(LogLevel.ERROR, "Spider failed! " + e);
+	    	} finally {
+	            // close browser + all tabs
+	            if (cd != null) {
+	            	log.Write(LogLevel.INFO, "Closing Chrome browser"); 
+		            cd.quit();
+	            }
+	    	}
     	
-    	try {
-    		Thread.sleep(3000);	
-    	} catch (Exception e) {}
-    	
-    	try {
-    		dispatch();
-    	} catch (Exception e) {
-    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
+	    	try {
+	    		Thread.sleep(3000);	
+	    	} catch (Exception e) {}
+	    	
+	    	try {
+	    		dispatch();
+	    	} catch (Exception e) {
+	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
+	    	}
     	}
     	// TODO: alternative method of duplicate removal
     	// all scrapers have their own list of URLS
     	// then they consolidate every so often, checking for dupes
+    	
+    	// eh, it is better db call wise but then we waste a lot of time crawling pages we have already been to
     }
+    
+    protected static String superPanicForURL(WebDriver cd) {
+    	// we are fucked
+    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
+    	return "#!panic";
+    }
+    
+    protected static String panicForURL(WebDriver cd) {
+    	if (allLinks.peek() == null) {
+    		return superPanicForURL(cd);
+    	}
+    	String[] urls = allLinks.toArray(new String[0]);
+    	int count = 0;
+    	while (visitedLinks.contains(urls[count])) count++;
+    	try {
+    		return urls[count];
+    	} catch (IndexOutOfBoundsException ex) {
+    		return urls[count-1];
+    	}
+	}
     
     // our 'spider'
     private static void bot(WebDriver cd, int amtOfLinks) throws Exception {
@@ -141,6 +175,11 @@ public class App
     		// TODO: improve duplicate detection
     		log.Write(LogLevel.INFO, "Collecting URLs on page");
         	List<String> links = getUniqueValidLinks(cd);
+        	
+        	if (links.size() == 0) {
+        		log.Write(LogLevel.WARN, "No URLs on page!");
+        		links.add(panicForURL(cd));
+        	}
         	currentLinks.addAll(links);
         	
         	int count = 0;
@@ -151,7 +190,7 @@ public class App
         		count++;
         		link = links.get(count);
         	}
-        	navigateTo(cd, link);
+        	if (link != "#!panic") navigateTo(cd, link);
     	}
     }
     
@@ -164,7 +203,7 @@ public class App
 
     	// create tasks
         while (!currentLinks.isEmpty()) {
-            String[] urls = grabRange(ARTICLES_PER_CHILD);
+            String[] urls = grabRange(BLOCK_SIZE);
             if (urls.length > 0) {
                 tasks.add(es.submit(() -> {
                 	WebDriver cd = null;

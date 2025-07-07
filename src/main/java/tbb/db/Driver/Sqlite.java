@@ -4,14 +4,18 @@
 
 package tbb.db.Driver;
 
+import tbb.db.Schema.Instance;
 // database table objects
 import tbb.db.Schema.Wiki;
 import tbb.utils.Logger.LogLevel;
 import tbb.utils.Logger.Logger;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
@@ -90,5 +94,77 @@ public class Sqlite {
 		} catch (Exception e) {
 			log.Write(LogLevel.ERROR, "WriteWiki operation failed! " + e);
 		}
+	}
+	public Instance startInstance() {
+		Instance i = new Instance();
+		writeInstance(i);
+		return i;
+	}
+	public Instance startInstance(
+			int totalArticles,
+			int partitionSize,
+			int blockSize,
+			int maxChildren,
+			int extraWaitMs,
+			int timeoutSec
+			) {
+		Instance i = new Instance(totalArticles, partitionSize, blockSize, maxChildren, extraWaitMs, timeoutSec);
+		writeInstance(i);
+		return i;
+	}
+	protected Instance findInstance(String ID) {
+		try (Session s = db.openSession()){ // try-with-resources
+			return s.find(Instance.class, ID);
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "findInstance operation failed! " + e);
+		}
+		return null;
+	}
+	protected void writeInstance(Instance i) {
+		try (Session s = db.openSession()){ // try-with-resources
+			s.beginTransaction();
+			s.persist(i);
+			s.getTransaction().commit();
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "writeInstance operation failed! " + e);
+		}
+	}
+	
+	protected void updateInstance(Instance i) {
+		try (Session s = db.openSession()){ // try-with-resources
+			s.beginTransaction();
+			s.merge(i);
+			s.getTransaction().commit();
+		} catch (Exception e) {
+			log.Write(LogLevel.ERROR, "updateInstance operation failed! " + e);
+		}
+	}
+	
+	public <T> void updateInstanceField(Instance i, String fieldName, T value) {
+		for (Field f : i.getClass().getDeclaredFields()) {
+			if (f.getName().equals(fieldName)) {
+				try {
+					if (f.getType() != value.getClass()) {
+						String msg = String.format("Wrong data type for Instance field %s. (Expecting %s, got %s)", 
+												   f.getName(), f.getType(), value.getClass());
+						log.Write(LogLevel.ERROR, msg);
+						continue;
+					}
+					f.set(i, value);
+				} catch (Exception ex) {
+					log.Write(LogLevel.ERROR, "Could not update Instance field " + f.getName() + "(using fieldName " + fieldName + ")");
+				}
+				updateInstance(i);
+				return;
+			}
+		}
+		log.Write(LogLevel.ERROR, "Could not find Instance field (using fieldName " + fieldName + ")");
+	}
+	
+	public void endInstance(Instance i) throws Exception {
+		// TODO: ensure all fields are neatly wrapped up
+		LocalDateTime completionTimestamp = LocalDateTime.now();
+		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);
+		updateInstanceField(i, "timeOmniscientRunning", Duration.between(i.timeOmniscientStarted, completionTimestamp));
 	}
 }

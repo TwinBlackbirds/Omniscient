@@ -12,6 +12,7 @@ import tbb.utils.Logger.Logger;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -43,7 +44,11 @@ public class Sqlite {
 				log.Write(LogLevel.BYPASS, "DEBUG ALERT: Deleting database");
 				Files.deleteIfExists(Paths.get("./database.sqlite"));
 				
+			} catch (FileSystemException fex) {
+				log.Write(LogLevel.BYPASS, "Could not delete database! File is in use by another process! Exiting...");
+				System.exit(1);
 			} catch (IOException e) { 
+				
 				log.Write(LogLevel.BYPASS, "Could not delete database! " + e);
 			}		
 			
@@ -182,8 +187,10 @@ public class Sqlite {
 		// TODO: ensure all fields are neatly wrapped up
 		LocalDateTime completionTimestamp = LocalDateTime.now();
 		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);
-		updateInstanceField(i, "timeOmniscientRunningMs", Duration.between(i.timeOmniscientStarted, completionTimestamp).toMillis());
+		long omniRunningMs = Duration.between(i.timeOmniscientStarted, completionTimestamp).toMillis();
+		updateInstanceField(i, "timeOmniscientRunningMs", omniRunningMs);
 		
+		updateInstanceField(i, "unaccountedRuntimeMs", omniRunningMs - (i.timeDispatcherRunningAvgMs + i.timeBotsRunningAvgMs + i.timeSpiderRunningAvgMs));
 		
 		if (i.linksScraped == i.linksWanted) {
 			updateInstanceField(i, "wasSuccessful", true);

@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
+import org.hibernate.exception.GenericJDBCException;
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeDriverService;
@@ -23,8 +24,10 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.UnreachableBrowserException;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.sqlite.SQLiteException;
 
 import tbb.db.Driver.Sqlite;
+import tbb.db.Schema.Instance;
 import tbb.db.Schema.Wiki;
 import tbb.utils.Config.ConfigPayload;
 import tbb.utils.Config.Configurator;
@@ -40,12 +43,13 @@ public class App
 	private static final ConfigPayload config = new Configurator(log).getData();
 	
 	// consts
-	private static final int MAX_RETRIES = 3; // if page fails to load (cd.get())
-	private static final int TIMEOUT_SEC = 30; // time to wait for el to be present
-	private static final int EXTRA_WAIT_MS = 1000; // extra time spent waiting after el is present
-	private static final int MAX_CHILDREN = 8; //10; // amount of child procs dispatch() is allowed to spawn
-	private static final int TOTAL_ARTICLES = 100000; //500;
-	private static final int PARTITION_COUNT = 10;
+	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
+	private static final int TOTAL_ARTICLES = config.TOTAL_ARTICLES; //500;
+	private static final int MAX_CHILDREN = config.MAX_CHILDREN; //10; // amount of child procs dispatch() is allowed to spawn
+	private static final int PARTITION_COUNT = config.PARTITION_COUNT;
+	private static final int EXTRA_WAIT_MS = config.EXTRA_WAIT_MS; // extra time spent waiting after el is present
+	private static final int TIMEOUT_SEC = config.TIMEOUT_SEC; // time to wait for el to be present
+	
 	
 	// calculated consts
 	private static final int PARTITION_SIZE = (int)Math.ceil(TOTAL_ARTICLES/PARTITION_COUNT);
@@ -75,12 +79,17 @@ public class App
 	
 	private static final Pattern splitPatt = Pattern.compile("(Notes|References) ?(\\[edit\\])?\n\n");
 	
+	// shared identification pools for duplicate reduction
 	private static ConcurrentLinkedQueue<String> allLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> currentLinks = new ConcurrentLinkedQueue<String>();
 	private static ConcurrentLinkedQueue<String> visitedLinks = new ConcurrentLinkedQueue<String>();
+	private static ConcurrentLinkedQueue<String> scrapedLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
-	private static Sqlite sql = new Sqlite(log, false); // boolean = debug mode (delete db)
+	private static Sqlite sql = new Sqlite(log, true); // boolean = debug mode (delete db)
+	private static Instance instance = sql.startInstance(TOTAL_ARTICLES, PARTITION_SIZE, 
+														 BLOCK_SIZE, MAX_CHILDREN, 
+														 EXTRA_WAIT_MS, TIMEOUT_SEC);
 	
 	// selenium browser tools
 	private static ChromeOptions co = null;
@@ -90,14 +99,14 @@ public class App
     {
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
-    	// TODO: add how long the program has been running for in box TUI
-    	// TODO: also add how many urls have been grabbed and how many articles have been extracted
+    	
     	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
     		handleBots();
+    		sql.endInstance(instance);
     	} catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
-    	} finally {
+    	} finally { 
 		    log.close();
 	        System.out.println("Process terminated with return code 0");	
     	}
@@ -132,11 +141,6 @@ public class App
 	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
 	    	}
     	}
-    	// TODO: alternative method of duplicate removal
-    	// all scrapers have their own list of URLS
-    	// then they consolidate every so often, checking for dupes
-    	
-    	// eh, it is better db call wise but then we waste a lot of time crawling pages we have already been to
     }
     
     protected static String superPanicForURL(WebDriver cd) {
@@ -171,10 +175,8 @@ public class App
     	}
     	
     	while (allLinks.size() < startingSize + amtOfLinks) {
-    		// collect links
-    		// TODO: improve duplicate detection
     		log.Write(LogLevel.INFO, "Collecting URLs on page");
-        	List<String> links = getUniqueValidLinks(cd);
+        	List<String> links = getUniqueValidLinks(cd, amtOfLinks);
         	
         	if (links.size() == 0) {
         		log.Write(LogLevel.WARN, "No URLs on page!");
@@ -246,8 +248,9 @@ public class App
      	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
     	for (String url : urls) {
     		navigateTo(tab, url);
-    		if (sql.findWiki(tab.getCurrentUrl())) { // extra layer of duplicate protection
-    			log.Write(LogLevel.WARN, "Skipping duplicate entry " + tab.getCurrentUrl());
+    		String currUrl = tab.getCurrentUrl();
+    		if (scrapedLinks.contains(currUrl) || sql.findWiki(currUrl)) { // extra layer of duplicate protection
+    			log.Write(LogLevel.WARN, "Skipping duplicate entry " + currUrl);
     			continue;
     		}
     		log.Write(LogLevel.INFO, "Collecting data from page");
@@ -307,24 +310,29 @@ public class App
     		log.Write(LogLevel.INFO, "Collected data : " + w.title); 
     		
     		// send it to database
-    		sql.writeWiki(w);	
-    		log.Write(LogLevel.INFO, "Wrote data to database : " + w.title); 
-    		
-    		sendState(tab, State.WAITING);
-    	}
+    		try {
+    			sql.writeWiki(w);	
+        		log.Write(LogLevel.INFO, "Wrote data to database : " + w.title); 
+    		} catch (GenericJDBCException ex) {
+    			if (ex.getCause() instanceof SQLiteException && ex.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")) {
+    				// swallow duplicate error (just skip it)
+    				log.Write(LogLevel.WARN, "Attempted to insert duplicate entry: " + w.id);
+    				if (!allLinks.contains(w.id)) allLinks.add(w.id);
+    			} else {
+    				throw ex;
+    			}
+    		} finally {
+    			scrapedLinks.add(w.id);
+    			sendState(tab, State.WAITING);
+    		}
+		}
     }
     
     public static ChromeDriver makeChromeInstance() {
     	if (co == null) {
-    		String startingArticle = null;
-        	boolean headless = false;
-        	if (config != null) {
-        		headless = config.headless;
-        		startingArticle = config.startingArticle;
-        	}
+        	boolean headless = config.headless;
         	
         	log.Write(LogLevel.BYPASS, "Headless mode: " + (headless ? "enabled" : "disabled"));
-        	log.Write(LogLevel.BYPASS, "Starting article: " + startingArticle);
         	
         	// set launch options
     		log.Write(LogLevel.DBG, "Setting Chrome launch options");
@@ -358,15 +366,17 @@ public class App
     	return newList.toArray(new String[0]);
     }
     
-    private static List<String> getUniqueValidLinks(WebDriver driver) {
+    private static List<String> getUniqueValidLinks(WebDriver driver, int amount) {
     	sendState(driver, State.COLLECTING);
     	List<WebElement> links = driver.findElements(By.cssSelector("div.mw-content-ltr a[href*='/wiki']"));
     	ArrayList<String> hrefs = new ArrayList<String>();
+    	int count = 0;
     	for (WebElement link : links) {
     		String href = link.getAttribute("href");
-    		if (isUrlEnglish(href) && isUrlWiki(href) && !allLinks.contains(href)) {
+    		if (isUrlEnglish(href) && isUrlWiki(href) && !allLinks.contains(href) && count < amount) {
     			hrefs.add(href);
     			allLinks.add(href);
+    			count++;
     		}
     	}
     	sendState(driver, State.WAITING);
@@ -376,8 +386,8 @@ public class App
     private static void navigateTo(WebDriver driver, String URL) {
     	sendState(driver, State.NAVIGATING);
     	driver.get(URL);
-    	visitedLinks.add(URL);
     	waitUntilPageLoaded(driver);
+    	visitedLinks.add(URL);
     }
     
     // wait for TIMEOUT_SEC seconds OR until the DOM reports readyState = complete

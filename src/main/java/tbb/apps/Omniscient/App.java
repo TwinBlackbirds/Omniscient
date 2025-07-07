@@ -121,6 +121,7 @@ public class App
     	WebDriver cd = null;
     	ArrayList<Duration> spiderTimes = new ArrayList<Duration>();
     	ArrayList<Duration> dispatcherTimes = new ArrayList<Duration>();
+    	ArrayList<Duration> botTimes = new ArrayList<Duration>();
     	// do it in 8 chunks
     	for (int i = 0; i < PARTITION_COUNT; i++) {
     		LocalDateTime spiderStart = LocalDateTime.now();
@@ -147,16 +148,22 @@ public class App
 	    	
 	    	try {
 	    		LocalDateTime dispatcherStart = LocalDateTime.now();
-	    		dispatch();
-	    		LocalDateTime dispatcherEnd = LocalDateTime.now();
+	    		LocalDateTime dispatcherEnd = dispatch(); // is also 'botStart'
+	    		
 	    		dispatcherTimes.add(Duration.between(dispatcherStart, dispatcherEnd));
+	    		
+	    		LocalDateTime botEnd = LocalDateTime.now();
+		    	botTimes.add(Duration.between(dispatcherEnd, botEnd));
+	    		
 	    	} catch (Exception e) {
 	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
 	    	}
+	    	
     	}
-
+    	
     	sql.updateInstanceField(instance, "timeSpiderRunningAvgMs", averageDuration(spiderTimes));
     	sql.updateInstanceField(instance, "timeDispatcherRunningAvgMs", averageDuration(dispatcherTimes));
+    	sql.updateInstanceField(instance, "timeBotsRunningAvgMs", averageDuration(botTimes));
     }
     
     protected static long averageDuration(ArrayList<Duration> times) {
@@ -221,13 +228,12 @@ public class App
     	}
     }
     
-    private static void dispatch() throws Exception {
+    private static LocalDateTime dispatch() throws Exception {
     	
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
     	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
     	
     	List<Future<?>> tasks = new ArrayList<>();
-
     	// create tasks
         while (!currentLinks.isEmpty()) {
             String[] urls = grabRange(BLOCK_SIZE);
@@ -251,22 +257,22 @@ public class App
                     }
                 }));
             }
-            Thread.sleep(3000); // stagger tasks
+            Thread.sleep(1000); // stagger tasks
         }
-
+        LocalDateTime dispatchEnd = LocalDateTime.now();
         es.shutdown();
 
+        
         // Wait for all tasks to complete
         for (Future<?> task : tasks) {
             try {
                 task.get(); // this blocks until that specific task finishes
-                Thread.sleep(10000); // polling time
             } catch (ExecutionException | InterruptedException e) {
                 log.Write(LogLevel.ERROR, "Task failed: " + e.getMessage());
                 task.cancel(true);
             } catch (UnreachableBrowserException e) {}
         }
-        
+        return dispatchEnd;
     }
     
     private static void scraper(WebDriver tab, String[] urls) throws Exception {

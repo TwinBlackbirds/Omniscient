@@ -43,30 +43,15 @@ public class Instance {
 	public long timeoutSec = 0;
 	
 	
-	// spider timer
-	@Column(name = "time_spider_started", nullable = true)
-	public LocalDateTime timeSpiderStarted;
-	@Column(name = "time_spider_completed", nullable = true)
-	public LocalDateTime timeSpiderCompleted;
-	@Column(name = "time_spider_running", nullable = true)
-	public Duration timeSpiderRunning;
+	// average timers (using average because of partition system)
+	@Column(name = "time_spider_running_average", nullable = true)
+	public Duration timeSpiderRunningAvg;
 	
-	// dispatcher timer
-	@Column(name = "time_dispatcher_started", nullable = true)
-	public LocalDateTime timeDispatcherStarted;
-	@Column(name = "time_dispatcher_completed", nullable = true)
-	public LocalDateTime timeDispatcherCompleted;
-	@Column(name = "time_dispatcher_running", nullable = true)
-	public Duration timeDispatcherRunning;
+	@Column(name = "time_dispatcher_running_average", nullable = true)
+	public Duration timeDispatcherRunningAvg;
 	
-	
-	// bots timer
-	@Column(name = "time_bots_started", nullable = true)
-	public LocalDateTime timeBotsStarted;
-	@Column(name = "time_bots_completed", nullable = true)
-	public LocalDateTime timeBotsCompleted;
-	@Column(name = "time_bots_running", nullable = true)
-	public Duration timeBotsRunning;
+	@Column(name = "time_bots_running_average", nullable = true)
+	public Duration timeBotsRunningAvg;
 	
 	public Instance() { }
 	

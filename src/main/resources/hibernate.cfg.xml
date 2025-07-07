@@ -28,6 +28,6 @@
     <!-- Add mapped entity classes here -->
     <!-- Example: -->
     <mapping class="tbb.db.Schema.Wiki"></mapping>
-	
+	<mapping class="tbb.db.Schema.Instance"></mapping>
   </session-factory>
 </hibernate-configuration>

@@ -1,0 +1,88 @@
+package tbb.db.Schema;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "instances")
+public class Instance {
+	@Id
+	@GeneratedValue(strategy = GenerationType.UUID)
+	public String id;
+	
+	// program-wide
+	@Column(name = "time_omniscient_started", nullable = false)
+	public LocalDateTime timeOmniscientStarted = LocalDateTime.now();
+	@Column(name = "time_omniscient_completed", nullable = true)
+	public LocalDateTime timeOmniscientCompleted;
+	@Column(name = "time_omnisicent_running", nullable = true)
+	public Duration timeOmniscientRunning;
+	@Column(name = "was_success", nullable = false)
+	public boolean wasSuccessful = false;
+	
+	// link info
+	@Column(name = "amount_links_wanted", nullable = false)
+	public long linksWanted = 0;
+	@Column(name = "amount_links_collected", nullable = false)
+	public long linksCollected = 0;
+	@Column(name = "amount_links_scraped", nullable = false)
+	public long linksScraped = 0;
+	
+	// extra info
+	@Column(name = "partition_size", nullable = false)
+	public long partitionSize = 0;
+	@Column(name = "block_size", nullable = false)
+	public long blockSize = 0;
+	@Column(name = "max_children", nullable = false)
+	public long maxChildren = 0;
+	@Column(name = "extra_wait_in_milliseconds", nullable = false)
+	public long extraWaitMs = 0;
+	@Column(name = "timeout_in_seconds", nullable = false)
+	public long timeoutSec = 0;
+	
+	
+	// spider timer
+	@Column(name = "time_spider_started", nullable = true)
+	public LocalDateTime timeSpiderStarted;
+	@Column(name = "time_spider_completed", nullable = true)
+	public LocalDateTime timeSpiderCompleted;
+	@Column(name = "time_spider_running", nullable = true)
+	public Duration timeSpiderRunning;
+	
+	// dispatcher timer
+	@Column(name = "time_dispatcher_started", nullable = true)
+	public LocalDateTime timeDispatcherStarted;
+	@Column(name = "time_dispatcher_completed", nullable = true)
+	public LocalDateTime timeDispatcherCompleted;
+	@Column(name = "time_dispatcher_running", nullable = true)
+	public Duration timeDispatcherRunning;
+	
+	
+	// bots timer
+	@Column(name = "time_bots_started", nullable = true)
+	public LocalDateTime timeBotsStarted;
+	@Column(name = "time_bots_completed", nullable = true)
+	public LocalDateTime timeBotsCompleted;
+	@Column(name = "time_bots_running", nullable = true)
+	public Duration timeBotsRunning;
+	
+	public Instance() { }
+	
+	public Instance(
+			int totalArticles, 
+			int partitionSize, 
+			int blockSize, 
+			int maxChildren, 
+			int extraWaitMs, 
+			int timeoutSec
+			) {
+		this.linksWanted = totalArticles;
+		this.partitionSize = partitionSize;
+		this.blockSize = blockSize;
+		this.maxChildren = maxChildren;
+		this.extraWaitMs = extraWaitMs;
+		this.timeoutSec = timeoutSec;
+	}
+}

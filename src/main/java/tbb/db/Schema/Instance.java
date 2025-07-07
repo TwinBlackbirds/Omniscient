@@ -17,8 +17,8 @@ public class Instance {
 	public LocalDateTime timeOmniscientStarted = LocalDateTime.now();
 	@Column(name = "time_omniscient_completed", nullable = true)
 	public LocalDateTime timeOmniscientCompleted;
-	@Column(name = "time_omnisicent_running", nullable = true)
-	public Duration timeOmniscientRunning;
+	@Column(name = "time_omnisicent_running_ms", nullable = true)
+	public long timeOmniscientRunningMs;
 	@Column(name = "was_success", nullable = false)
 	public boolean wasSuccessful = false;
 	
@@ -44,14 +44,14 @@ public class Instance {
 	
 	
 	// average timers (using average because of partition system)
-	@Column(name = "time_spider_running_average", nullable = true)
-	public Duration timeSpiderRunningAvg;
+	@Column(name = "time_spider_running_average_ms", nullable = true)
+	public long timeSpiderRunningAvgMs;
 	
-	@Column(name = "time_dispatcher_running_average", nullable = true)
-	public Duration timeDispatcherRunningAvg;
+	@Column(name = "time_dispatcher_running_average_ms", nullable = true)
+	public long timeDispatcherRunningAvgMs;
 	
-	@Column(name = "time_bots_running_average", nullable = true)
-	public Duration timeBotsRunningAvg;
+	@Column(name = "time_bots_running_average_ms", nullable = true)
+	public long timeBotsRunningAvgMs;
 	
 	public Instance() { }
 	

@@ -155,12 +155,12 @@ public class App
 	    	}
     	}
 
-    	sql.updateInstanceField(instance, "timeSpiderRunningAvg", averageDuration(spiderTimes));
-    	sql.updateInstanceField(instance, "timeDispatcherRunningAvg", averageDuration(dispatcherTimes));
+    	sql.updateInstanceField(instance, "timeSpiderRunningAvgMs", averageDuration(spiderTimes));
+    	sql.updateInstanceField(instance, "timeDispatcherRunningAvgMs", averageDuration(dispatcherTimes));
     }
     
-    protected static int averageDuration(ArrayList<Duration> times) {
-    	int sum = 0;
+    protected static long averageDuration(ArrayList<Duration> times) {
+    	long sum = 0;
     	// summarize timers
     	for (Duration d : times) {
     		sum += d.toMillis();

@@ -182,7 +182,7 @@ public class Sqlite {
 		// TODO: ensure all fields are neatly wrapped up
 		LocalDateTime completionTimestamp = LocalDateTime.now();
 		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);
-		updateInstanceField(i, "timeOmniscientRunning", Duration.between(i.timeOmniscientStarted, completionTimestamp));
+		updateInstanceField(i, "timeOmniscientRunningMs", Duration.between(i.timeOmniscientStarted, completionTimestamp).toMillis());
 		
 		
 		if (i.linksScraped == i.linksWanted) {

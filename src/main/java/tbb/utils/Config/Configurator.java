@@ -23,7 +23,7 @@ public class Configurator {
 	
 	private Logger log = null;
 	
-	private ConfigPayload data = null;
+	private ConfigPayload data = new ConfigPayload();
 	
 	
 	// do not touch

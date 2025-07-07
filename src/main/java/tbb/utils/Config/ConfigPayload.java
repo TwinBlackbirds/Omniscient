@@ -6,20 +6,15 @@ package tbb.utils.Config;
 
 public class ConfigPayload {
 	// your configuration parameters
-	public boolean headless;
-	public String startingArticle;
+	public boolean headless = false;
+
+	public int MAX_RETRIES = 3;
+	public int TOTAL_ARTICLES = 100000;
+	public int MAX_CHILDREN = 8;
+	public int PARTITION_COUNT = 10;
+	public int EXTRA_WAIT_MS = 1000;
+	public int TIMEOUT_SEC = 30;
 	
-	public ConfigPayload() {
-		this(false, null);
-	}
 	
-	public ConfigPayload(boolean headless) {
-		this.headless = headless;
-		this.startingArticle = null;
-	}
-	
-	public ConfigPayload(boolean headless, String startingArticle) {
-		this.headless = headless;
-		this.startingArticle = startingArticle;
-	}
+	public ConfigPayload() { };
 }

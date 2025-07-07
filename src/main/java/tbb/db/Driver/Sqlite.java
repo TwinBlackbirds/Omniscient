@@ -144,7 +144,12 @@ public class Sqlite {
 		for (Field f : i.getClass().getDeclaredFields()) {
 			if (f.getName().equals(fieldName)) {
 				try {
-					if (f.getType() != value.getClass()) {
+					Class<?> fieldType = f.getType();
+					Class<?> valueType = value.getClass();
+					if (fieldType.isPrimitive()) {
+						fieldType = getWrapperClass(fieldType);
+					}
+					if (!fieldType.isAssignableFrom(valueType)) {
 						String msg = String.format("Wrong data type for Instance field %s. (Expecting %s, got %s)", 
 												   f.getName(), f.getType(), value.getClass());
 						log.Write(LogLevel.ERROR, msg);
@@ -161,10 +166,27 @@ public class Sqlite {
 		log.Write(LogLevel.ERROR, "Could not find Instance field (using fieldName " + fieldName + ")");
 	}
 	
+	private Class<?> getWrapperClass(Class<?> primitiveType) {
+	    if (primitiveType == int.class) return Integer.class;
+	    if (primitiveType == long.class) return Long.class;
+	    if (primitiveType == boolean.class) return Boolean.class;
+	    if (primitiveType == byte.class) return Byte.class;
+	    if (primitiveType == char.class) return Character.class;
+	    if (primitiveType == float.class) return Float.class;
+	    if (primitiveType == double.class) return Double.class;
+	    if (primitiveType == short.class) return Short.class;
+	    return primitiveType; // If it's not a primitive, just return it as-is
+	}
+	
 	public void endInstance(Instance i) throws Exception {
 		// TODO: ensure all fields are neatly wrapped up
 		LocalDateTime completionTimestamp = LocalDateTime.now();
 		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);
 		updateInstanceField(i, "timeOmniscientRunning", Duration.between(i.timeOmniscientStarted, completionTimestamp));
+		
+		
+		if (i.linksScraped == i.linksWanted) {
+			updateInstanceField(i, "wasSuccessful", true);
+		}
 	}
 }

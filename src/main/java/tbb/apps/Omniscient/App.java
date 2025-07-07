@@ -7,6 +7,7 @@
 package tbb.apps.Omniscient;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -99,10 +100,14 @@ public class App
     {
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
-    	
+    	long startCount = sql.countWikis();
     	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
     		handleBots();
+    		// finalize instance
+    		long endCount = sql.countWikis();
+    		sql.updateInstanceField(instance, "linksCollected", (long) allLinks.size());
+    		sql.updateInstanceField(instance, "linksScraped", (long) endCount-startCount);
     		sql.endInstance(instance);
     	} catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
@@ -114,8 +119,11 @@ public class App
     }
     private static void handleBots() {
     	WebDriver cd = null;
+    	ArrayList<Duration> spiderTimes = new ArrayList<Duration>();
+    	ArrayList<Duration> dispatcherTimes = new ArrayList<Duration>();
     	// do it in 8 chunks
     	for (int i = 0; i < PARTITION_COUNT; i++) {
+    		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();
 	    		bot(cd, PARTITION_SIZE); 	
@@ -130,17 +138,34 @@ public class App
 		            cd.quit();
 	            }
 	    	}
-    	
+    		LocalDateTime spiderEnd = LocalDateTime.now();
+    		spiderTimes.add(Duration.between(spiderStart, spiderEnd));
+    		
 	    	try {
 	    		Thread.sleep(3000);	
 	    	} catch (Exception e) {}
 	    	
 	    	try {
+	    		LocalDateTime dispatcherStart = LocalDateTime.now();
 	    		dispatch();
+	    		LocalDateTime dispatcherEnd = LocalDateTime.now();
+	    		dispatcherTimes.add(Duration.between(dispatcherStart, dispatcherEnd));
 	    	} catch (Exception e) {
 	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
 	    	}
     	}
+
+    	sql.updateInstanceField(instance, "timeSpiderRunningAvg", averageDuration(spiderTimes));
+    	sql.updateInstanceField(instance, "timeDispatcherRunningAvg", averageDuration(dispatcherTimes));
+    }
+    
+    protected static int averageDuration(ArrayList<Duration> times) {
+    	int sum = 0;
+    	// summarize timers
+    	for (Duration d : times) {
+    		sum += d.toMillis();
+    	}
+    	return sum / times.size();
     }
     
     protected static String superPanicForURL(WebDriver cd) {

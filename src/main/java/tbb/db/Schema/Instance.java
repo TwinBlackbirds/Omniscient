@@ -53,6 +53,9 @@ public class Instance {
 	@Column(name = "time_bots_running_average_ms", nullable = true)
 	public long timeBotsRunningAvgMs;
 	
+	@Column(name = "unaccounted_runtime_ms", nullable = true)
+	public long unaccountedRuntimeMs;
+	
 	public Instance() { }
 	
 	public Instance(

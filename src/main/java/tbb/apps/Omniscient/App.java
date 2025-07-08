@@ -98,6 +98,7 @@ public class App
 	private static ChromeOptions co = null;
 	
 	
+	// TODO: sub-program or feature flag that enables 'verify' mode: check the links in database are valid
     public static void main( String[] args )
     {
     	// end-user feedback
@@ -129,6 +130,10 @@ public class App
     		 * Spider
     		 * 
     		 */
+    		// TODO: multi-threaded spider
+    		// they all grab their own links (amount = block_size)
+    		// they congregate their lists and remove duplicates
+    		// if they have not met the quota, go again
     		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();
@@ -169,10 +174,7 @@ public class App
 	    	} catch (Exception e) {
 	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
 	    	}
-	    	// finalize instance
-    		long endCount = sql.countWikis();
-    		
-    		sql.updateInstanceField(instance, "linksScraped", (long) endCount-START_COUNT);
+	    	
     	}
     	
     	sql.updateInstanceField(instance, "timeSpiderRunningAvgMs", averageDuration(spiderTimes));
@@ -221,6 +223,10 @@ public class App
     	// create tasks
         while (!currentLinks.isEmpty()) {
             String[] urls = grabRange(BLOCK_SIZE);
+            if (urls == null) {
+            	currentLinks.clear();
+            	break;
+            }
             if (urls.length > 0) {
                 tasks.add(es.submit(() -> {
                 	WebDriver cd = null;
@@ -234,6 +240,9 @@ public class App
                 	}
                 	try {
                         scraper(cd, urls);
+                        // updated scraped count field
+                		long endCount = sql.countWikis();
+                		sql.updateInstanceField(instance, "linksScraped", (long) endCount-START_COUNT);
                     } catch (Exception e) {
                         log.Write(LogLevel.ERROR, "Scraper failed! " + e);
                     } finally {
@@ -303,7 +312,6 @@ public class App
     		}
     		if (hasInfoBox) mainText = mainText.replace(infoBoxText, "");
     		
-    		
     		// remove the extra bad-quality data left behind
     		mainText = splitPatt.split(mainText)[0];
     		
@@ -363,13 +371,6 @@ public class App
     
     public static String[] grabRange(int amount) {
     	
-    	int lastIdx = currentLinks.size() - 1;
-    	if (amount >= lastIdx) { // we are at the end
-    		String[] range = currentLinks.toArray(new String[0]);
-    		currentLinks.clear();
-    		return range;
-    	}
-    	
         ArrayList<String> newList = new ArrayList<String>();
         String pop = currentLinks.poll();
         int count = 0;
@@ -378,6 +379,9 @@ public class App
     		pop = currentLinks.poll();
     		count++;
         }   
+    	if (newList.isEmpty()) {
+    		return null;
+    	}
     	return newList.toArray(new String[0]);
     }
     

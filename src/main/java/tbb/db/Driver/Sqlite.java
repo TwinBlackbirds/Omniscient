@@ -10,6 +10,7 @@ import tbb.db.Schema.Wiki;
 import tbb.utils.Logger.LogLevel;
 import tbb.utils.Logger.Logger;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.FileSystemException;
@@ -48,7 +49,6 @@ public class Sqlite {
 				log.Write(LogLevel.BYPASS, "Could not delete database! File is in use by another process! Exiting...");
 				System.exit(1);
 			} catch (IOException e) { 
-				
 				log.Write(LogLevel.BYPASS, "Could not delete database! " + e);
 			}		
 			

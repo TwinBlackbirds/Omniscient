@@ -6,8 +6,9 @@ package tbb.utils.Config;
 
 public class ConfigPayload {
 	// your configuration parameters
-	public boolean headless = false;
-
+	public boolean headless = true;
+	public boolean DEBUG_MODE = false;
+	
 	public int MAX_RETRIES = 3;
 	public int TOTAL_ARTICLES = 100000;
 	public int MAX_CHILDREN = 8;

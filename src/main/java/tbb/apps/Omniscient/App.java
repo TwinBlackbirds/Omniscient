@@ -87,7 +87,7 @@ public class App
 	private static ConcurrentLinkedQueue<String> scrapedLinks = new ConcurrentLinkedQueue<String>();
 	
 	// db
-	private static Sqlite sql = new Sqlite(log, true); // boolean = debug mode (delete db)
+	private static Sqlite sql = new Sqlite(log, config.DEBUG_MODE); // boolean = debug mode (delete db)
 	private static Instance instance = sql.startInstance(TOTAL_ARTICLES, PARTITION_SIZE, 
 														 BLOCK_SIZE, MAX_CHILDREN, 
 														 EXTRA_WAIT_MS, TIMEOUT_SEC);
@@ -105,16 +105,16 @@ public class App
     	
     	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
-    		handleBots();
-    		
-    	} catch (Exception e) {
+    		handleBots();	
+    	}
+    	catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
     	} finally { 
 		    log.close();
-		    
+		    sql.endInstance(instance);
 	        System.out.println("Process terminated with return code 0");	
     	}
-    	sql.endInstance(instance);
+    	
     	
     }
     private static void handleBots() {
@@ -180,9 +180,6 @@ public class App
     	sql.updateInstanceField(instance, "timeBotsRunningAvgMs", averageDuration(botTimes));
     }
 
-    
-    
-    // our 'spider'
     private static void spider(WebDriver cd, int amtOfLinks) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
     	int startingSize = allLinks.size();

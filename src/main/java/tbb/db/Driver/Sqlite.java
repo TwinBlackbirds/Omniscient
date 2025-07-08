@@ -183,7 +183,7 @@ public class Sqlite {
 	    return primitiveType; // If it's not a primitive, just return it as-is
 	}
 	
-	public void endInstance(Instance i) throws Exception {
+	public void endInstance(Instance i) {
 		// TODO: ensure all fields are neatly wrapped up
 		LocalDateTime completionTimestamp = LocalDateTime.now();
 		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);

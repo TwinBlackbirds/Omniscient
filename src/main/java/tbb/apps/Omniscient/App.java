@@ -92,6 +92,8 @@ public class App
 														 BLOCK_SIZE, MAX_CHILDREN, 
 														 EXTRA_WAIT_MS, TIMEOUT_SEC);
 	
+	private static final int START_COUNT = sql.countWikis();
+	
 	// selenium browser tools
 	private static ChromeOptions co = null;
 	
@@ -100,21 +102,19 @@ public class App
     {
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
-    	long startCount = sql.countWikis();
+    	
     	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
     		handleBots();
-    		// finalize instance
-    		long endCount = sql.countWikis();
-    		sql.updateInstanceField(instance, "linksCollected", (long) allLinks.size());
-    		sql.updateInstanceField(instance, "linksScraped", (long) endCount-startCount);
-    		sql.endInstance(instance);
+    		
     	} catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
     	} finally { 
 		    log.close();
+		    
 	        System.out.println("Process terminated with return code 0");	
     	}
+    	sql.endInstance(instance);
     	
     }
     private static void handleBots() {
@@ -124,10 +124,15 @@ public class App
     	ArrayList<Duration> botTimes = new ArrayList<Duration>();
     	// do it in 8 chunks
     	for (int i = 0; i < PARTITION_COUNT; i++) {
+    		/*
+    		 * 
+    		 * Spider
+    		 * 
+    		 */
     		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();
-	    		bot(cd, PARTITION_SIZE); 	
+	    		spider(cd, PARTITION_SIZE); 	
 	    		log.Write(LogLevel.INFO, "Exiting spider (round " + (i+1) + "/" + PARTITION_COUNT + ")");
 	    		cd.quit(); cd = null;
 	    	} catch (Exception e) {
@@ -141,7 +146,13 @@ public class App
 	    	}
     		LocalDateTime spiderEnd = LocalDateTime.now();
     		spiderTimes.add(Duration.between(spiderStart, spiderEnd));
+    		sql.updateInstanceField(instance, "linksCollected", (long) allLinks.size());
     		
+    		/*
+    		 * 
+    		 * Dispatcher
+    		 * 
+    		 */
 	    	try {
 	    		Thread.sleep(3000);	
 	    	} catch (Exception e) {}
@@ -158,45 +169,21 @@ public class App
 	    	} catch (Exception e) {
 	    		log.Write(LogLevel.ERROR, "Dispatcher failed! " + e);
 	    	}
-	    	
+	    	// finalize instance
+    		long endCount = sql.countWikis();
+    		
+    		sql.updateInstanceField(instance, "linksScraped", (long) endCount-START_COUNT);
     	}
     	
     	sql.updateInstanceField(instance, "timeSpiderRunningAvgMs", averageDuration(spiderTimes));
     	sql.updateInstanceField(instance, "timeDispatcherRunningAvgMs", averageDuration(dispatcherTimes));
     	sql.updateInstanceField(instance, "timeBotsRunningAvgMs", averageDuration(botTimes));
     }
+
     
-    protected static long averageDuration(ArrayList<Duration> times) {
-    	long sum = 0;
-    	// summarize timers
-    	for (Duration d : times) {
-    		sum += d.toMillis();
-    	}
-    	return sum / times.size();
-    }
-    
-    protected static String superPanicForURL(WebDriver cd) {
-    	// we are fucked
-    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
-    	return "#!panic";
-    }
-    
-    protected static String panicForURL(WebDriver cd) {
-    	if (allLinks.peek() == null) {
-    		return superPanicForURL(cd);
-    	}
-    	String[] urls = allLinks.toArray(new String[0]);
-    	int count = 0;
-    	while (visitedLinks.contains(urls[count])) count++;
-    	try {
-    		return urls[count];
-    	} catch (IndexOutOfBoundsException ex) {
-    		return urls[count-1];
-    	}
-	}
     
     // our 'spider'
-    private static void bot(WebDriver cd, int amtOfLinks) throws Exception {
+    private static void spider(WebDriver cd, int amtOfLinks) throws Exception {
     	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
     	int startingSize = allLinks.size();
     	Wiki recent = sql.getLastWiki();
@@ -447,6 +434,16 @@ public class App
     	return (ensureSchema(url, false).startsWith("en.") ? true : false);
     }
     
+    
+    protected static long averageDuration(ArrayList<Duration> times) {
+    	long sum = 0;
+    	// summarize timers
+    	for (Duration d : times) {
+    		sum += d.toMillis();
+    	}
+    	return sum / times.size();
+    }
+    
     private static void sendState(WebDriver driver, State state) {
     	String cleanURL = ensureSchema(driver.getCurrentUrl(), false);
     	if (cleanURL.startsWith("data")) { // browser just started
@@ -473,6 +470,27 @@ public class App
     		return url;
     	}
     }
+    
+
+    protected static String superPanicForURL(WebDriver cd) {
+    	// we are fucked
+    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
+    	return "#!panic";
+    }
+    
+    protected static String panicForURL(WebDriver cd) {
+    	if (allLinks.peek() == null) {
+    		return superPanicForURL(cd);
+    	}
+    	String[] urls = allLinks.toArray(new String[0]);
+    	int count = 0;
+    	while (visitedLinks.contains(urls[count])) count++;
+    	try {
+    		return urls[count];
+    	} catch (IndexOutOfBoundsException ex) {
+    		return urls[count-1];
+    	}
+	}
     
     private static void waitForElementClickable(WebDriver driver, String selector) {
     	sendState(driver, State.LOADING);

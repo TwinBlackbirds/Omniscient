@@ -104,6 +104,12 @@ public class App
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
     	
+    	// rudimentary way to check if we are running in eclipse
+    	boolean isJar = App.class.getResource("App.class").toString().startsWith("jar");
+    	log.Write(LogLevel.BYPASS, "Is running as jar? " + (isJar ? "yes" : "no"));
+    	
+    	if (!isJar) sql.updateInstanceField(instance, "runningInEclipse", true);
+    	
     	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
     	try {
     		handleBots();	

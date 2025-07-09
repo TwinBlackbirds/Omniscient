@@ -42,6 +42,12 @@ public class Instance {
 	@Column(name = "timeout_in_seconds", nullable = false)
 	public long timeoutSec = 0;
 	
+	// if we are running in eclipse (red square termination messes up instance logging)
+	// basically if this is true, we are still debugging the program
+	// mainly just a way for me to get rid of bad data later (filter out running_in_eclipse instances)
+	// TODO: more sophisticated way to work around this, background process or something?
+	@Column(name = "running_in_eclipse", nullable = false)
+	public boolean runningInEclipse = false;
 	
 	// average timers (using average because of partition system)
 	@Column(name = "time_spider_running_average_ms", nullable = true)

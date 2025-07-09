@@ -21,15 +21,13 @@ public class Configurator {
 	private final String filepathStr = "config.json";
 	private final Path filepath = Paths.get(filepathStr);
 	
-	private Logger log = null;
+	private Logger log = new Logger();
 	
 	private ConfigPayload data = new ConfigPayload();
 	
 	
 	// do not touch
-	public Configurator(Logger log) {
-		this.log = log;
-		
+	public Configurator() {
 		ObjectMapper om = new ObjectMapper();
 		if (!Files.exists(filepath)) {
 			makeDefaultFile(om);

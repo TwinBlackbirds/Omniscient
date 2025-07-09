@@ -4,10 +4,14 @@
 
 package tbb.utils.Config;
 
+import tbb.utils.Logger.LogLevel;
+
 public class ConfigPayload {
 	// your configuration parameters
 	public boolean headless = true;
 	public boolean DEBUG_MODE = false;
+	
+	public LogLevel minLogLevel = LogLevel.INFO;
 	
 	public int MAX_RETRIES = 3;
 	public int TOTAL_ARTICLES = 100000;

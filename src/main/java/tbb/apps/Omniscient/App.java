@@ -40,8 +40,8 @@ import tbb.utils.Printer.State;
 public class App 
 {
 	// configuration
-	private static Logger log = new Logger(LogLevel.INFO); // min log level
-	private static final ConfigPayload config = new Configurator(log).getData();
+	private static final ConfigPayload config = new Configurator().getData();
+	private static Logger log = new Logger(config.minLogLevel); 
 	
 	// consts
 	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
@@ -50,7 +50,6 @@ public class App
 	private static final int PARTITION_COUNT = config.PARTITION_COUNT;
 	private static final int EXTRA_WAIT_MS = config.EXTRA_WAIT_MS; // extra time spent waiting after el is present
 	private static final int TIMEOUT_SEC = config.TIMEOUT_SEC; // time to wait for el to be present
-	
 	
 	// calculated consts
 	private static final int PARTITION_SIZE = (int)Math.ceil(TOTAL_ARTICLES/PARTITION_COUNT);
@@ -69,6 +68,7 @@ public class App
 			"/wiki/Talk:"
 	};
 	
+	// for data cleaning
 	private static final String[] BANNED_TEXT_CHUNKS = {
 			"div.reflist",
 			"div.refbegin",
@@ -77,7 +77,6 @@ public class App
 			".metadata.sister-bar",
 			".mw-heading + ul",
 	};
-	
 	private static final Pattern splitPatt = Pattern.compile("(Notes|References) ?(\\[edit\\])?\n\n");
 	
 	// shared identification pools for duplicate reduction
@@ -91,8 +90,7 @@ public class App
 	private static Instance instance = sql.startInstance(TOTAL_ARTICLES, PARTITION_SIZE, 
 														 BLOCK_SIZE, MAX_CHILDREN, 
 														 EXTRA_WAIT_MS, TIMEOUT_SEC);
-	
-	private static final int START_COUNT = sql.countWikis();
+	private static final int START_COUNT = sql.countWikis(); // get original amount of entries in db to track amount of changes
 	
 	// selenium browser tools
 	private static ChromeOptions co = null;
@@ -106,11 +104,12 @@ public class App
     	
     	// rudimentary way to check if we are running in eclipse
     	boolean isJar = App.class.getResource("App.class").toString().startsWith("jar");
-    	log.Write(LogLevel.BYPASS, "Is running as jar? " + (isJar ? "yes" : "no"));
-    	
     	if (!isJar) sql.updateInstanceField(instance, "runningInEclipse", true);
     	
-    	log.Write(LogLevel.BYPASS, "Configured to get " + TOTAL_ARTICLES + " articles");
+    	log.Write(LogLevel.BYPASS, "Environment detected: " + (isJar ? "JAR" : "Eclipse"));
+    	log.Write(LogLevel.BYPASS, "Headless mode: " + (config.headless ? "enabled" : "disabled"));
+    	log.Write(LogLevel.INFO, String.format("Configured to get [ %d ] articles in total", TOTAL_ARTICLES));
+    	
     	try {
     		handleBots();	
     	}
@@ -189,7 +188,7 @@ public class App
     }
 
     private static void spider(WebDriver cd, int amtOfLinks) throws Exception {
-    	log.Write(LogLevel.INFO, String.format("Starting spider process to collect %d links", amtOfLinks));
+    	log.Write(LogLevel.INFO, String.format("Starting spider process to collect partition size (%d) links", amtOfLinks));
     	int startingSize = allLinks.size();
     	Wiki recent = sql.getLastWiki();
     	if (recent == null) {
@@ -199,11 +198,11 @@ public class App
     	}
     	
     	while (allLinks.size() < startingSize + amtOfLinks) {
-    		log.Write(LogLevel.INFO, "Collecting URLs on page");
+    		log.Write(LogLevel.INFO, "Collecting URLs on page : " + getPrettyPageTitle(cd));
         	List<String> links = getUniqueValidLinks(cd, amtOfLinks);
         	
         	if (links.size() == 0) {
-        		log.Write(LogLevel.WARN, "No URLs on page!");
+        		log.Write(LogLevel.WARN, "No URLs on page : " + getPrettyPageTitle(cd));
         		links.add(panicForURL(cd));
         	}
         	currentLinks.addAll(links);
@@ -218,6 +217,11 @@ public class App
         	}
         	if (link != "#!panic") navigateTo(cd, link);
     	}
+    }
+    
+    
+    private static String getPrettyPageTitle(WebDriver cd) {
+    	return cd.getTitle().replace("- Wikipedia", "");
     }
     
     private static LocalDateTime dispatch() throws Exception {
@@ -299,7 +303,7 @@ public class App
     		boolean hasInfoBox = (tab.findElements(By.cssSelector("table.infobox")).size() > 0);
     		String infoBoxText = null;
     		if (!hasInfoBox) {
-    			log.Write(LogLevel.WARN, "No infobox located on the page " + tab.getCurrentUrl());
+    			log.Write(LogLevel.DBG, "DBG WARN: No infobox located on the page " + tab.getCurrentUrl());
     		} else {
     			infoBoxText = tab.findElement(By.cssSelector("table.infobox")).getText();	
     		}
@@ -336,12 +340,13 @@ public class App
     			sendState(tab, State.WAITING);
     			continue;
     		}
-    		log.Write(LogLevel.INFO, "Collected data : " + w.title); 
+    		log.Write(LogLevel.DBG, "Done collecting data : " + w.title); 
     		
     		// send it to database
     		try {
-    			sql.writeWiki(w);	
-        		log.Write(LogLevel.INFO, "Wrote data to database : " + w.title); 
+    			sql.writeWiki(w);
+    			
+        		log.Write(LogLevel.INFO, "Saved data to database : " + w.title); 
     		} catch (GenericJDBCException ex) {
     			if (ex.getCause() instanceof SQLiteException && ex.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")) {
     				// swallow duplicate error (just skip it)
@@ -360,9 +365,7 @@ public class App
     public static ChromeDriver makeChromeInstance() {
     	if (co == null) {
         	boolean headless = config.headless;
-        	
-        	log.Write(LogLevel.BYPASS, "Headless mode: " + (headless ? "enabled" : "disabled"));
-        	
+        	        	
         	// set launch options
     		log.Write(LogLevel.DBG, "Setting Chrome launch options");
         	ChromeOptions cOpts = new ChromeOptions();
@@ -371,7 +374,7 @@ public class App
     	}
     	
     	// start driver
-    	log.Write(LogLevel.INFO, "Starting Chrome browser instance");
+    	log.Write(LogLevel.DBG, "Starting Chrome browser instance");
     	return new ChromeDriver(ChromeDriverService.createDefaultService(), co);
     }
     
@@ -419,13 +422,13 @@ public class App
     private static void waitUntilPageLoaded(WebDriver driver) {
     	sendState(driver, State.LOADING);
     	String pageName = driver.getTitle();
-    	log.Write(LogLevel.INFO, String.format("Waiting for page '%s' to load", pageName));
+    	log.Write(LogLevel.DBG, String.format("Waiting for page '%s' to load", pageName));
     	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
                 webDriver -> ((JavascriptExecutor) webDriver)
                     .executeScript("return document.readyState")
                     .equals("complete")
             );
-    	log.Write(LogLevel.INFO, "Page loaded");
+    	log.Write(LogLevel.DBG, "Page loaded");
     	sendState(driver, State.WAITING);
     }
     

@@ -13,7 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
 public class Logger implements AutoCloseable {
-	private LogLevel minLevel = null;
+	private LogLevel minLevel = LogLevel.INFO;
 	
 	private ArrayList<String> Stack = new ArrayList<String>();
 	

@@ -6,3 +6,4 @@
 /config.json
 /database.sqlite-shm
 /database.sqlite-wal
+/dependency-reduced-pom.xml

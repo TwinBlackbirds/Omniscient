@@ -287,7 +287,7 @@ public class App
     			log.Write(LogLevel.WARN, "Skipping duplicate entry " + currUrl);
     			continue;
     		}
-    		log.Write(LogLevel.INFO, "Collecting data from page");
+    		log.Write(LogLevel.INFO, "Collecting data from page : " + getPrettyPageTitle(tab));
     		sendState(tab, State.COLLECTING);
     		// collect main body of text from page
     		WebElement mainChunk = tab.findElement(By.cssSelector("div[class*='mw-content-ltr']"));

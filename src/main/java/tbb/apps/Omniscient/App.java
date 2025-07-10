@@ -178,7 +178,7 @@ public class App
 	    	
 	    	try {
 	    		LocalDateTime dispatcherStart = LocalDateTime.now();
-	    		LocalDateTime dispatcherEnd = dispatch(); // is also 'botStart'
+	    		LocalDateTime dispatcherEnd = dispatcher(); // is also 'botStart'
 	    		
 	    		dispatcherTimes.add(Duration.between(dispatcherStart, dispatcherEnd));
 	    		
@@ -233,7 +233,7 @@ public class App
     	return cd.getTitle().replace("- Wikipedia", "");
     }
     
-    private static LocalDateTime dispatch() throws Exception {
+    private static LocalDateTime dispatcher() throws Exception {
     	
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
     	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
@@ -246,6 +246,9 @@ public class App
             	currentLinks.clear();
             	break;
             }
+            log.Write(LogLevel.INFO, String.format(
+                    "Dispatching scraper task with %d URLs. Remaining in queue: %d", 
+                    urls.length, currentLinks.size()));
             if (urls.length > 0) {
                 tasks.add(es.submit(() -> {
                 	WebDriver cd = null;
@@ -254,8 +257,9 @@ public class App
                 			cd = makeChromeInstance();
                 		} catch (Exception e) {
                 			log.Write(LogLevel.ERROR, "Failed to start browser! Retrying..");
-                			try {Thread.sleep(5000);} catch (Exception ex) {}
+                			try {Thread.sleep(3000);} catch (Exception ex) {}
                 		}
+                		
                 	}
                 	try {
                         scraper(cd, urls);
@@ -288,8 +292,7 @@ public class App
     }
     
     private static void scraper(WebDriver tab, String[] urls) throws Exception {
-     	log.Write(LogLevel.INFO, String.format("Scraper received %d urls. There are %d left in currentLinks.", urls.length, currentLinks.size()));
-    	for (String url : urls) {
+     	for (String url : urls) {
     		navigateTo(tab, url);
     		String currUrl = tab.getCurrentUrl();
     		if (scrapedLinks.contains(currUrl) || sql.findWiki(currUrl)) { // extra layer of duplicate protection

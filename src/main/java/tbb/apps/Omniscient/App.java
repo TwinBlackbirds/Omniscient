@@ -17,14 +17,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
+import org.sqlite.SQLiteException;
 import org.hibernate.exception.GenericJDBCException;
+
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeDriverService;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.UnreachableBrowserException;
 import org.openqa.selenium.support.ui.WebDriverWait;
-import org.sqlite.SQLiteException;
 
 import tbb.db.Driver.Sqlite;
 import tbb.db.Schema.Instance;

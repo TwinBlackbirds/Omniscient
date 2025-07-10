@@ -10,5 +10,6 @@ public class VerifyData {
 	public static void verify() {
 		// walk through the database and report bad data (in both instances and wiki)
 		// perform summary of data as well
+		sql.countWikis();
 	}
 }

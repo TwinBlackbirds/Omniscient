@@ -184,16 +184,19 @@ public class Sqlite {
 	}
 	
 	public void endInstance(Instance i) {
-		// TODO: ensure all fields are neatly wrapped up
-		LocalDateTime completionTimestamp = LocalDateTime.now();
-		updateInstanceField(i, "timeOmniscientCompleted", completionTimestamp);
-		long omniRunningMs = Duration.between(i.timeOmniscientStarted, completionTimestamp).toMillis();
-		updateInstanceField(i, "timeOmniscientRunningMs", omniRunningMs);
-		
-		updateInstanceField(i, "unaccountedRuntimeMs", omniRunningMs - (i.timeDispatcherRunningAvgMs + i.timeBotsRunningAvgMs + i.timeSpiderRunningAvgMs));
+		i.timeOmniscientCompleted = LocalDateTime.now();
+		long omniRunningMs = Duration.between(i.timeOmniscientStarted, i.timeOmniscientCompleted).toMillis();
+		i.timeOmniscientRunningMs = omniRunningMs;
+		long omniUnaccountedMs = omniRunningMs - (i.timeDispatcherRunningAvgMs + i.timeBotsRunningAvgMs + i.timeSpiderRunningAvgMs);
+		i.unaccountedRuntimeMs = omniUnaccountedMs;
+
+		// dont report unaccountedRuntime if we did not finish the whole execution
+		if (i.timeBotsRunningAvgMs == 0 || i.timeSpiderRunningAvgMs == 0 || i.timeDispatcherRunningAvgMs == 0) 
+			i.unaccountedRuntimeMs = 0;
 		
 		if (i.linksScraped == i.linksWanted) {
-			updateInstanceField(i, "wasSuccessful", true);
+			i.wasSuccessful = true;
 		}
+		updateInstance(i);
 	}
 }

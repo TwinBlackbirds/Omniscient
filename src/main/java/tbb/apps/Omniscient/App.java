@@ -107,6 +107,10 @@ public class App
     	// ensure we wrap up shop before closing (CTRL-C)
     	Runtime.getRuntime().addShutdownHook(new Thread(() -> {
     		log.close();
+    		// wrap up the instance variables that we must calculate in this scope before passing it off 
+    		if (instance.linksCollected == 0) instance.linksCollected = allLinks.size();
+    		if (instance.linksScraped == 0) instance.linksScraped = sql.countWikis() - START_COUNT;
+    		
 		    sql.endInstance(instance);
 	        System.out.println("Process terminated with return code 0");	
     	}));
@@ -144,6 +148,8 @@ public class App
     		// they all grab their own links (amount = block_size)
     		// they congregate their lists and remove duplicates
     		// if they have not met the quota, go again
+    		
+    		// alternate TODO: optimize single-threaded spider link collection
     		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();

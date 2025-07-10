@@ -1,9 +1,10 @@
 package tbb.db.Schema;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
+
+// TODO: total runtime of bots/spider/dispatcher as well as avg
 
 @Entity
 @Table(name = "instances")

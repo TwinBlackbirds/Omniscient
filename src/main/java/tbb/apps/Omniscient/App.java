@@ -44,16 +44,16 @@ public class App
 	private static Logger log = new Logger(config.minLogLevel); 
 	
 	// consts
-	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
+//	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
 	private static final int TOTAL_ARTICLES = config.TOTAL_ARTICLES; //500;
-	private static final int MAX_CHILDREN = config.MAX_CHILDREN; //10; // amount of child procs dispatch() is allowed to spawn
+	private static final int MAX_WORKERS = config.MAX_WORKERS; //10; // amount of child procs dispatch() is allowed to spawn
 	private static final int PARTITION_COUNT = config.PARTITION_COUNT;
 	private static final int EXTRA_WAIT_MS = config.EXTRA_WAIT_MS; // extra time spent waiting after el is present
 	private static final int TIMEOUT_SEC = config.TIMEOUT_SEC; // time to wait for el to be present
 	
 	// calculated consts
 	private static final int PARTITION_SIZE = (int)Math.ceil(TOTAL_ARTICLES/PARTITION_COUNT);
-	private static final int BLOCK_SIZE = (int)Math.ceil(PARTITION_SIZE / MAX_CHILDREN);
+	private static final int BLOCK_SIZE = (int)Math.ceil(PARTITION_SIZE / MAX_WORKERS);
 	
 	// url handling
 	private static final String[] BANNED_URL_FRAGMENTS = {
@@ -88,7 +88,7 @@ public class App
 	// db
 	private static Sqlite sql = new Sqlite(log, config.DEBUG_MODE); // boolean = debug mode (delete db)
 	private static Instance instance = sql.startInstance(TOTAL_ARTICLES, PARTITION_SIZE, 
-														 BLOCK_SIZE, MAX_CHILDREN, 
+														 BLOCK_SIZE, MAX_WORKERS, 
 														 EXTRA_WAIT_MS, TIMEOUT_SEC);
 	private static final int START_COUNT = sql.countWikis(); // get original amount of entries in db to track amount of changes
 	
@@ -236,7 +236,7 @@ public class App
     private static LocalDateTime dispatcher() throws Exception {
     	
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
-    	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
+    	ExecutorService es = Executors.newFixedThreadPool(MAX_WORKERS);
     	
     	List<Future<?>> tasks = new ArrayList<>();
     	// create tasks

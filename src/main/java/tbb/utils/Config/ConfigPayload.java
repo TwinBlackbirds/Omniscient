@@ -15,7 +15,7 @@ public class ConfigPayload {
 	
 	public int MAX_RETRIES = 3;
 	public int TOTAL_ARTICLES = 100000;
-	public int MAX_CHILDREN = 8;
+	public int MAX_WORKERS = 8;
 	public int PARTITION_COUNT = 10;
 	public int EXTRA_WAIT_MS = 1000;
 	public int TIMEOUT_SEC = 30;

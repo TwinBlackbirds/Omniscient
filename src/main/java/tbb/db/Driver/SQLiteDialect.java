@@ -94,6 +94,7 @@ import static org.hibernate.type.descriptor.DateTimeUtils.appendAsTimestampWithM
  *
  * @author Christian Beikov
  */
+@SuppressWarnings({ "deprecation", "unused", "removal" })
 public class SQLiteDialect extends Dialect {
 
 	private static final DatabaseVersion DEFAULT_VERSION = DatabaseVersion.make( 2, 0 );
@@ -544,7 +545,6 @@ public class SQLiteDialect extends Dialect {
 
 	@Override
 	public boolean doesReadCommittedCauseWritersToBlockReaders() {
-		// TODO Validate (WAL mode...)
 		return true;
 	}
 

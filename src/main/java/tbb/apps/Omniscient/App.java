@@ -10,28 +10,97 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Pattern;
 
 import org.hibernate.exception.GenericJDBCException;
 import org.openqa.selenium.*;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeDriverService;
+import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.UnreachableBrowserException;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.sqlite.SQLiteException;
 
+import tbb.db.Driver.Sqlite;
+import tbb.db.Schema.Instance;
 import tbb.db.Schema.Wiki;
+import tbb.utils.Config.ConfigPayload;
+import tbb.utils.Config.Configurator;
 import tbb.utils.Logger.LogLevel;
+import tbb.utils.Logger.Logger;
+import tbb.utils.Printer.Printer;
 import tbb.utils.Printer.State;
 
-public class App extends AppHelper
+public class App 
 {
+	// configuration
+	private static final ConfigPayload config = new Configurator().getData();
+	private static Logger log = new Logger(config.minLogLevel); 
+	
+	// consts
+	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
+	private static final int TOTAL_ARTICLES = config.TOTAL_ARTICLES; //500;
+	private static final int MAX_CHILDREN = config.MAX_CHILDREN; //10; // amount of child procs dispatch() is allowed to spawn
+	private static final int PARTITION_COUNT = config.PARTITION_COUNT;
+	private static final int EXTRA_WAIT_MS = config.EXTRA_WAIT_MS; // extra time spent waiting after el is present
+	private static final int TIMEOUT_SEC = config.TIMEOUT_SEC; // time to wait for el to be present
+	
+	// calculated consts
+	private static final int PARTITION_SIZE = (int)Math.ceil(TOTAL_ARTICLES/PARTITION_COUNT);
+	private static final int BLOCK_SIZE = (int)Math.ceil(PARTITION_SIZE / MAX_CHILDREN);
+	
+	// url handling
+	private static final String[] BANNED_URL_FRAGMENTS = {
+			"/wiki/Help:", 
+			"/wiki/Special:",
+			"/wiki/Wikipedia:",
+			"/wiki/Category:",
+			"/wiki/File:",
+			"/wiki/Template:",
+			"/wiki/Template_talk:",
+			"/wiki/Portal:",
+			"/wiki/Talk:"
+	};
+	
+	// for data cleaning
+	private static final String[] BANNED_TEXT_CHUNKS = {
+			"div.reflist",
+			"div.refbegin",
+			"#catlinks",
+			"div.navbox",
+			".metadata.sister-bar",
+			".mw-heading + ul",
+	};
+	private static final Pattern splitPatt = Pattern.compile("(Notes|References) ?(\\[edit\\])?\n\n");
+	
+	// shared identification pools for duplicate reduction
+	private static ConcurrentLinkedQueue<String> allLinks = new ConcurrentLinkedQueue<String>();
+	private static ConcurrentLinkedQueue<String> currentLinks = new ConcurrentLinkedQueue<String>();
+	private static ConcurrentLinkedQueue<String> visitedLinks = new ConcurrentLinkedQueue<String>();
+	private static ConcurrentLinkedQueue<String> scrapedLinks = new ConcurrentLinkedQueue<String>();
+	
+	// db
+	private static Sqlite sql = new Sqlite(log, config.DEBUG_MODE); // boolean = debug mode (delete db)
+	private static Instance instance = sql.startInstance(TOTAL_ARTICLES, PARTITION_SIZE, 
+														 BLOCK_SIZE, MAX_CHILDREN, 
+														 EXTRA_WAIT_MS, TIMEOUT_SEC);
+	private static final int START_COUNT = sql.countWikis(); // get original amount of entries in db to track amount of changes
+	
+	// selenium browser tools
+	private static ChromeOptions co = null;
+	
 	
 	// TODO: sub-program or feature flag that enables 'verify' mode: check the links in database are valid
     public static void main( String[] args )
     {
     	// end-user feedback
-    	// Printer.startBox("Omniscient");
+//    	Printer.startBox("Omniscient");
     	
     	// ensure we wrap up shop before closing (CTRL-C)
     	Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -78,7 +147,7 @@ public class App extends AppHelper
     		// they congregate their lists and remove duplicates
     		// if they have not met the quota, go again
     		
-    		// alternate TODO: optimize single-threaded spider link collection
+    		// alternative TODO: optimize single-threaded link collection
     		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();
@@ -109,7 +178,7 @@ public class App extends AppHelper
 	    	
 	    	try {
 	    		LocalDateTime dispatcherStart = LocalDateTime.now();
-	    		LocalDateTime dispatcherEnd = dispatcher(); // is also 'botStart'
+	    		LocalDateTime dispatcherEnd = dispatch(); // is also 'botStart'
 	    		
 	    		dispatcherTimes.add(Duration.between(dispatcherStart, dispatcherEnd));
 	    		
@@ -160,8 +229,11 @@ public class App extends AppHelper
     }
     
     
+    private static String getPrettyPageTitle(WebDriver cd) {
+    	return cd.getTitle().replace("- Wikipedia", "");
+    }
     
-    private static LocalDateTime dispatcher() throws Exception {
+    private static LocalDateTime dispatch() throws Exception {
     	
     	log.Write(LogLevel.INFO, "Dispatching to collector processes");
     	ExecutorService es = Executors.newFixedThreadPool(MAX_CHILDREN);
@@ -299,6 +371,166 @@ public class App extends AppHelper
 		}
     }
     
+    public static ChromeDriver makeChromeInstance() {
+    	if (co == null) {
+        	boolean headless = config.headless;
+        	        	
+        	// set launch options
+    		log.Write(LogLevel.DBG, "Setting Chrome launch options");
+        	ChromeOptions cOpts = new ChromeOptions();
+        	if (headless) { cOpts.addArguments("headless"); }
+        	co = cOpts;
+    	}
+    	
+    	// start driver
+    	log.Write(LogLevel.DBG, "Starting Chrome browser instance");
+    	return new ChromeDriver(ChromeDriverService.createDefaultService(), co);
+    }
     
+    public static String[] grabRange(int amount) {
+    	
+        ArrayList<String> newList = new ArrayList<String>();
+        String pop = currentLinks.poll();
+        int count = 0;
+    	while (pop != null && count < amount)  {
+        	newList.add(pop);
+    		pop = currentLinks.poll();
+    		count++;
+        }   
+    	if (newList.isEmpty()) {
+    		return null;
+    	}
+    	return newList.toArray(new String[0]);
+    }
+    
+    private static List<String> getUniqueValidLinks(WebDriver driver, int amount) {
+    	sendState(driver, State.COLLECTING);
+    	List<WebElement> links = driver.findElements(By.cssSelector("div.mw-content-ltr a[href*='/wiki']"));
+    	ArrayList<String> hrefs = new ArrayList<String>();
+    	int count = 0;
+    	for (WebElement link : links) {
+    		String href = link.getAttribute("href");
+    		if (isUrlEnglish(href) && isUrlWiki(href) && !allLinks.contains(href) && count < amount) {
+    			hrefs.add(href);
+    			allLinks.add(href);
+    			count++;
+    		}
+    	}
+    	sendState(driver, State.WAITING);
+    	return hrefs;
+    }
+    
+    private static void navigateTo(WebDriver driver, String URL) {
+    	sendState(driver, State.NAVIGATING);
+    	driver.get(URL);
+    	waitUntilPageLoaded(driver);
+    	visitedLinks.add(URL);
+    }
+    
+    // wait for TIMEOUT_SEC seconds OR until the DOM reports readyState = complete
+    private static void waitUntilPageLoaded(WebDriver driver) {
+    	sendState(driver, State.LOADING);
+    	String pageName = driver.getTitle();
+    	log.Write(LogLevel.DBG, String.format("Waiting for page '%s' to load", pageName));
+    	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
+                webDriver -> ((JavascriptExecutor) webDriver)
+                    .executeScript("return document.readyState")
+                    .equals("complete")
+            );
+    	log.Write(LogLevel.DBG, "Page loaded");
+    	sendState(driver, State.WAITING);
+    }
+    
+    private static boolean isUrlWiki(String url) {
+    	for (String frag : BANNED_URL_FRAGMENTS) {
+    		if (url.contains(frag)) return false;
+    	}
+    	if (!url.contains("wikipedia.org")) return false;
+    	return true;
+    }
+    
+    private static boolean isUrlEnglish(String url) {
+    	return (ensureSchema(url, false).startsWith("en.") ? true : false);
+    }
+    
+    
+    protected static long averageDuration(ArrayList<Duration> times) {
+    	long sum = 0;
+    	// summarize timers
+    	for (Duration d : times) {
+    		sum += d.toMillis();
+    	}
+    	return sum / times.size();
+    }
+    
+    private static void sendState(WebDriver driver, State state) {
+    	String cleanURL = ensureSchema(driver.getCurrentUrl(), false);
+    	if (cleanURL.startsWith("data")) { // browser just started
+    		Printer.sh.update(state, "N/A");
+    		return;
+    	}
+    	if (cleanURL.startsWith("www.")) {
+    		cleanURL = cleanURL.replace("www.", "");
+    	}
+    	cleanURL = cleanURL.split("/")[0];
+    	Printer.sh.update(state, cleanURL);
+    }
+    
+    private static String ensureSchema(String url, boolean giveSchemaBack) {
+    	if (url.startsWith("https://")) {
+    		if (giveSchemaBack) {
+    			return url;
+    		}
+    		return url.replace("https://", "");
+    	} else {
+    		if (giveSchemaBack) {
+    			return "https://" + url;
+    		}
+    		return url;
+    	}
+    }
+    
+
+    protected static String superPanicForURL(WebDriver cd) {
+    	// we are fucked
+    	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
+    	return "#!panic";
+    }
+    
+    protected static String panicForURL(WebDriver cd) {
+    	if (allLinks.peek() == null) {
+    		return superPanicForURL(cd);
+    	}
+    	String[] urls = allLinks.toArray(new String[0]);
+    	int count = 0;
+    	while (visitedLinks.contains(urls[count])) count++;
+    	try {
+    		return urls[count];
+    	} catch (IndexOutOfBoundsException ex) {
+    		return urls[count-1];
+    	}
+	}
+    
+    private static void waitForElementClickable(WebDriver driver, String selector) {
+    	sendState(driver, State.LOADING);
+    	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
+		    ExpectedConditions.elementToBeClickable(By.cssSelector(selector))
+		);
+    	try {
+    		Thread.sleep(EXTRA_WAIT_MS);
+    	} catch (Exception e) { }
+    	sendState(driver, State.WAITING);
+	}
+    
+    private static void waitForElementVisible(WebDriver driver, String selector) {
+    	sendState(driver, State.LOADING);
+    	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
+		    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(selector))
+		);
+    	try {
+    		Thread.sleep(EXTRA_WAIT_MS);
+    	} catch (Exception e) { }
+    	sendState(driver, State.WAITING);
+	}
 }
 

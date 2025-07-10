@@ -391,7 +391,7 @@ public class App
     }
     
     public static String[] grabRange(int amount) {
-    	
+    	// TODO: concatenate array if larger than TOTAL_ARTICLES ?
         ArrayList<String> newList = new ArrayList<String>();
         String pop = currentLinks.poll();
         int count = 0;
@@ -457,7 +457,7 @@ public class App
     }
     
     
-    protected static long averageDuration(ArrayList<Duration> times) {
+    private static long averageDuration(ArrayList<Duration> times) {
     	long sum = 0;
     	// summarize timers
     	for (Duration d : times) {
@@ -494,13 +494,13 @@ public class App
     }
     
 
-    protected static String superPanicForURL(WebDriver cd) {
+    private static String superPanicForURL(WebDriver cd) {
     	// we are fucked
     	navigateTo(cd, "https://en.wikipedia.org/wiki/Main_Page");
     	return "#!panic";
     }
     
-    protected static String panicForURL(WebDriver cd) {
+    private static String panicForURL(WebDriver cd) {
     	if (allLinks.peek() == null) {
     		return superPanicForURL(cd);
     	}
@@ -512,28 +512,6 @@ public class App
     	} catch (IndexOutOfBoundsException ex) {
     		return urls[count-1];
     	}
-	}
-    
-    private static void waitForElementClickable(WebDriver driver, String selector) {
-    	sendState(driver, State.LOADING);
-    	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
-		    ExpectedConditions.elementToBeClickable(By.cssSelector(selector))
-		);
-    	try {
-    		Thread.sleep(EXTRA_WAIT_MS);
-    	} catch (Exception e) { }
-    	sendState(driver, State.WAITING);
-	}
-    
-    private static void waitForElementVisible(WebDriver driver, String selector) {
-    	sendState(driver, State.LOADING);
-    	new WebDriverWait(driver, Duration.ofSeconds(TIMEOUT_SEC)).until(
-		    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(selector))
-		);
-    	try {
-    		Thread.sleep(EXTRA_WAIT_MS);
-    	} catch (Exception e) { }
-    	sendState(driver, State.WAITING);
 	}
 }
 

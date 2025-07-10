@@ -102,11 +102,20 @@ public class App
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
     	
+    	
+    	
+    	// ensure we wrap up shop before closing (CTRL-C)
+    	Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+    		log.close();
+		    sql.endInstance(instance);
+	        System.out.println("Process terminated with return code 0");	
+    	}));
+    	
     	// rudimentary way to check if we are running in eclipse
     	boolean isJar = App.class.getResource("App.class").toString().startsWith("jar");
     	if (!isJar) sql.updateInstanceField(instance, "runningInEclipse", true);
     	
-    	log.Write(LogLevel.BYPASS, "Environment detected: " + (isJar ? "JAR" : "Eclipse"));
+    	log.Write(LogLevel.BYPASS, "Environment detected: " + (isJar ? "JAR" : "Eclipse (.class)"));
     	log.Write(LogLevel.BYPASS, "Headless mode: " + (config.headless ? "enabled" : "disabled"));
     	log.Write(LogLevel.INFO, String.format("Configured to get [ %d ] articles in total", TOTAL_ARTICLES));
     	
@@ -115,11 +124,7 @@ public class App
     	}
     	catch (Exception e) {
     		log.Write(LogLevel.ERROR, "Supervisor failed! " + e);
-    	} finally { 
-		    log.close();
-		    sql.endInstance(instance);
-	        System.out.println("Process terminated with return code 0");	
-    	}
+    	} 
     	
     	
     }

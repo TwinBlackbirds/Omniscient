@@ -8,7 +8,9 @@
     <!-- SQLite dialect from Gwenn -->
     <property name="hibernate.dialect">tbb.db.Driver.SQLiteDialect</property>
 
+    
     <!-- JDBC driver and URL -->
+    <property name="tbb.db.location">database.sqlite</property>
     <property name="hibernate.connection.driver_class">org.sqlite.JDBC</property>
     <property name="hibernate.connection.url">jdbc:sqlite:database.sqlite</property>
 
@@ -24,6 +26,8 @@
 
     <!-- Optional: Disable second-level cache (safe for testing) -->
     <property name="hibernate.cache.use_second_level_cache">false</property>
+
+	
 
     <!-- Add mapped entity classes here -->
     <!-- Example: -->

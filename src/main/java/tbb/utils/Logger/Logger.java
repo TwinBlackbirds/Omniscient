@@ -5,9 +5,14 @@
 package tbb.utils.Logger;
 
 
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -15,14 +20,72 @@ import java.util.ArrayList;
 public class Logger implements AutoCloseable {
 	private LogLevel minLevel = LogLevel.INFO;
 	
+	private String cleanParentName = null;
+	private String formattedParentName = null;
+	
+	
 	private ArrayList<String> Stack = new ArrayList<String>();
 	
-	public Logger() { }
-	
-	public Logger(LogLevel minLevel) {
+	public <T> Logger(Class<T> parent, LogLevel minLevel) {
+		Path fPath = Paths.get("./logs");
+		try {
+			if (Files.exists(fPath)) deleteInnerFiles(fPath);
+			Files.createDirectory(fPath);
+		} catch (Exception e) { 
+			System.out.println("Failed to initialize log folder! Exiting...");
+			System.exit(1);
+		}
 		this.minLevel = minLevel;
+		
+		String[] pNameSplit = parent.getName().toString().split("\\.");
+		this.cleanParentName = parent.getName();
+		if (pNameSplit.length > 1) {
+			this.cleanParentName = pNameSplit[pNameSplit.length-1]; 
+		}
+
+		if (!(cleanParentName == null || 30 <= cleanParentName.length())) {
+	        int padding = 12 - cleanParentName.length();
+	        if (padding % 2 != 0) padding -= 1; //adjust centering if length of word is odd
+	        
+	        int paddingStart = padding / 2;
+	        int paddingEnd = padding - paddingStart;
+
+	        // bounds check
+	        paddingStart = (paddingStart < 0) ? 0 : paddingStart;
+	        paddingEnd = (paddingEnd < 0) ? 0 : paddingEnd;
+	        
+	        this.formattedParentName = " |" + " ".repeat(paddingStart) + cleanParentName + " ".repeat(paddingEnd) + "|";           
+        } else {
+        	this.formattedParentName = this.cleanParentName;
+        }
+
+        
+		this.Write(LogLevel.DBG, "Logger parent process name is: " + cleanParentName);
 	}
 
+	private void deleteInnerFiles(Path fPath) throws Exception {
+		Files.walkFileTree(fPath, new SimpleFileVisitor<Path>() {
+	         @Override
+	         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+	             throws IOException
+	         {
+	             Files.delete(file);
+	             return FileVisitResult.CONTINUE;
+	         }
+	         @Override
+	         public FileVisitResult postVisitDirectory(Path dir, IOException e)
+	             throws IOException
+	         {
+	             if (e == null) {
+	                 Files.delete(dir);
+	                 return FileVisitResult.CONTINUE;
+	             } else {
+	                 // directory iteration failed
+	                 throw e;
+	             }
+	         }
+	     });
+	}
 	// generic logging function
 	public void Write(LogLevel severity, String msg) {
 		String ldt = LocalDateTime.now()
@@ -42,7 +105,9 @@ public class Logger implements AutoCloseable {
 		default:
 			severityMsg = "SYSTEM"; break;
 		}
-		String log = String.format("[ %s ] (%s): %s", ldt, severityMsg, msg);
+		
+		
+		String log = String.format("[ %s ] %s (%s): %s", ldt, formattedParentName, severityMsg, msg);
 		if (severity.compareTo(minLevel) >= 0 || severity == LogLevel.BYPASS) { // only print messages at or above minLevel
 			System.out.println(log);
 		}
@@ -51,7 +116,7 @@ public class Logger implements AutoCloseable {
 	
 	// dump stack trace to file 
 		public void Dump() {
-			Path pa = Paths.get("log.txt");
+			Path pa = Paths.get("./logs/" + cleanParentName + "_log.txt");
 			if (Files.exists(pa)) {
 				try {
 					Files.delete(pa);	
@@ -68,7 +133,7 @@ public class Logger implements AutoCloseable {
 		
 	// dump stack trace to file (for severe failures)
 	public void Dump(Exception e) {
-		Path pa = Paths.get("exception_log.txt");
+		Path pa = Paths.get("./logs/" + cleanParentName + "_exception_log.txt");
 		if (Files.exists(pa)) {
 			try {
 				Files.delete(pa);	

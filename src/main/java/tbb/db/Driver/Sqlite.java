@@ -39,7 +39,7 @@ public class Sqlite {
 		Configuration config = new Configuration()
 				   .configure(); // use hibernate.cfg.xml
 		this.dbPath = config.getProperty("tbb.db.location");
-		log.Write(LogLevel.INFO, "Using database path: " + dbPath);
+		log.Write(LogLevel.DBG, "Using database path: " + dbPath);
 		// debug feature
 		if (deleteDB) {
 			try {
@@ -47,10 +47,10 @@ public class Sqlite {
 				Files.deleteIfExists(Paths.get(dbPath));
 				
 			} catch (FileSystemException fex) {
-				log.Write(LogLevel.BYPASS, "Could not delete database! File is in use by another process! Exiting...");
+				log.Write(LogLevel.ERROR, "Could not delete database! File is in use by another process! Exiting...");
 				System.exit(1);
 			} catch (IOException e) { 
-				log.Write(LogLevel.BYPASS, "Could not delete database! " + e);
+				log.Write(LogLevel.ERROR, "Could not delete database! " + e);
 			}		
 			
 		}

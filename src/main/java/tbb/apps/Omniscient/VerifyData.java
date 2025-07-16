@@ -12,7 +12,7 @@ public class VerifyData {
 		// walk through the database and report bad data (in both instances and wiki)
 		// perform summary of data as well
 		// start first by loading all into memory, optimize later
-		DatabaseCriteria c = new DatabaseCriteria(log);
+		DatabaseCriteria c = new DatabaseCriteria(new Logger(DatabaseCriteria.class, LogLevel.INFO));
 		
 		// first check: database exists
 		try {
@@ -25,9 +25,9 @@ public class VerifyData {
 		// second check: database has entries
 		int cnt = sql.countWikis();
 		c.setCount(cnt);
-		log.Write(LogLevel.INFO, "Amount of wikis recognized: " + cnt);
+		log.Write(LogLevel.DBG, "Amount of wikis recognized: " + cnt);
 		
-		
+		log.close();
 		return c.checkCriteria();
 	}
 }

@@ -29,6 +29,7 @@ public class DatabaseCriteria {
 		}
 		
 		log.Write(LogLevel.INFO, "Database verified successfully!");
+		log.close();
 		return true;
 	}
 	public void setCount(int cnt) {

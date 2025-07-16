@@ -21,7 +21,7 @@ public class Configurator {
 	private final String filepathStr = "config.json";
 	private final Path filepath = Paths.get(filepathStr);
 	
-	private Logger log = new Logger();
+	private Logger log = new Logger(Configurator.class, LogLevel.ERROR);
 	
 	private ConfigPayload data = new ConfigPayload();
 	

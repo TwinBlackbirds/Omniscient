@@ -3,7 +3,7 @@ package tbb.db.test.Driver;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
-import tbb.apps.Omniscient.VerifyData;
+import tbb.db.Driver.VerifyData;
 
 /**
  * Unit test for simple App.

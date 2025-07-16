@@ -1,4 +1,4 @@
-package tbb.apps.Omniscient;
+package tbb.db.Driver;
 
 import tbb.utils.Logger.LogLevel;
 import tbb.utils.Logger.Logger;

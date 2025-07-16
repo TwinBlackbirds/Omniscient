@@ -1,6 +1,5 @@
-package tbb.apps.Omniscient;
+package tbb.db.Driver;
 
-import tbb.db.Driver.Sqlite;
 import tbb.utils.Logger.LogLevel;
 import tbb.utils.Logger.Logger;
 

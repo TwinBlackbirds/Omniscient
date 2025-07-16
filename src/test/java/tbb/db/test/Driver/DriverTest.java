@@ -3,6 +3,7 @@ package tbb.db.test.Driver;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
+import tbb.apps.Omniscient.VerifyData;
 
 /**
  * Unit test for simple App.
@@ -30,7 +31,7 @@ public class DriverTest extends TestCase
     
     public void testApp()
     {
-    	// TODO: add tests
-    	assertTrue(true);
+    	boolean dbVerified = VerifyData.verify();
+    	assertTrue(dbVerified);
     }
 }

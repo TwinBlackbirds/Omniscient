@@ -27,6 +27,7 @@ import org.hibernate.cfg.Configuration;
 public class Sqlite {
 	private Logger log;
 	private SessionFactory db; // do not expose to users, instead write methods such as the writeChannel one below
+	private String dbPath = null;
 	
 	public Sqlite(Logger log) {
 		this(log, false);
@@ -37,12 +38,13 @@ public class Sqlite {
 		
 		Configuration config = new Configuration()
 				   .configure(); // use hibernate.cfg.xml
-		
+		this.dbPath = config.getProperty("tbb.db.location");
+		log.Write(LogLevel.INFO, "Using database path: " + dbPath);
 		// debug feature
 		if (deleteDB) {
 			try {
 				log.Write(LogLevel.BYPASS, "DEBUG ALERT: Deleting database");
-				Files.deleteIfExists(Paths.get("./database.sqlite"));
+				Files.deleteIfExists(Paths.get(dbPath));
 				
 			} catch (FileSystemException fex) {
 				log.Write(LogLevel.BYPASS, "Could not delete database! File is in use by another process! Exiting...");
@@ -57,6 +59,9 @@ public class Sqlite {
 		
 		
 		this.db = config.buildSessionFactory();
+	}
+	public boolean checkDbExists() {
+		return Files.exists(Paths.get(dbPath));
 	}
 	
 	public boolean findWiki(String id) {

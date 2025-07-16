@@ -1,8 +1,8 @@
 /target/
 /database.sqlite
-/log.txt
 /.dbeaver
-/exception_log.txt
+/logs
+/logs/*
 /config.json
 /database.sqlite-shm
 /database.sqlite-wal

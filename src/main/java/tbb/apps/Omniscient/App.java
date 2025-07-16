@@ -41,7 +41,7 @@ public class App
 {
 	// configuration
 	private static final ConfigPayload config = new Configurator().getData();
-	private static Logger log = new Logger(config.minLogLevel); 
+	private static Logger log = new Logger(App.class, config.minLogLevel); 
 	
 	// consts
 //	private static final int MAX_RETRIES = config.MAX_RETRIES; // if page fails to load (cd.get())
@@ -104,12 +104,13 @@ public class App
     	
     	// ensure we wrap up shop before closing (CTRL-C)
     	Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-    		log.close();
+    		
     		// wrap up the instance variables that we must calculate in this scope before passing it off 
     		if (instance.linksCollected == 0) instance.linksCollected = allLinks.size();
     		if (instance.linksScraped == 0) instance.linksScraped = sql.countWikis() - START_COUNT;
     		
 		    sql.endInstance(instance);
+		    log.close();
 	        System.out.println("Process terminated with return code 0");	
     	}));
     	

@@ -142,12 +142,14 @@ public class App
     		 * Spider
     		 * 
     		 */
-    		// TODO: multi-threaded spider
+    		// IDEA: multi-threaded spider
     		// they all grab their own links (amount = block_size)
     		// they congregate their lists and remove duplicates
     		// if they have not met the quota, go again
     		
-    		// alternative TODO: optimize single-threaded link collection
+    		
+    		// this way we can feed them different starting articles, and the links collected will be more diverse
+    		
     		LocalDateTime spiderStart = LocalDateTime.now();
     		try {
 	    		cd = makeChromeInstance();
@@ -222,7 +224,11 @@ public class App
         	// db operation is expensive that is why it is not done in getUniqueValidLinks
         	while (visitedLinks.contains(link) || sql.findWiki(link)) { 
         		count++;
-        		link = links.get(count);
+        		try {
+        			link = links.get(count);
+        		} catch (Exception e) {
+        			break;
+        		}
         	}
         	if (link != "#!panic") navigateTo(cd, link);
     	}
@@ -506,11 +512,15 @@ public class App
     	}
     	String[] urls = allLinks.toArray(new String[0]);
     	int count = 0;
-    	while (visitedLinks.contains(urls[count])) count++;
+    	while (visitedLinks.contains(urls[count]) || scrapedLinks.contains(urls[count])) count++;
     	try {
     		return urls[count];
     	} catch (IndexOutOfBoundsException ex) {
-    		return urls[count-1];
+    		try {
+    			return urls[count-1];
+    		} catch (IndexOutOfBoundsException iex) {
+    			return superPanicForURL(cd);
+    		}
     	}
 	}
 }

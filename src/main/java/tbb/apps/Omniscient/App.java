@@ -6,6 +6,10 @@
 
 package tbb.apps.Omniscient;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -102,6 +106,7 @@ public class App
     	// end-user feedback
 //    	Printer.startBox("Omniscient");
     	
+    	initiateShutdownDaemon();
     	// ensure we wrap up shop before closing (CTRL-C)
     	Runtime.getRuntime().addShutdownHook(new Thread(() -> {
     		
@@ -238,6 +243,35 @@ public class App
     
     private static String getPrettyPageTitle(WebDriver cd) {
     	return cd.getTitle().replace("- Wikipedia", "");
+    }
+    
+    private static void initiateShutdownDaemon() {
+    	Thread shutdownWatcher = new Thread(() -> {
+            try {
+                while (true) {
+                    if (Files.exists(Paths.get("SIGTERM"))) {
+                        shutdown();
+                        break;
+                    }
+                    Thread.sleep(1000); // Check every 1 second
+                }
+            } catch (InterruptedException e) {
+                log.Write(LogLevel.ERROR, "Shutdown daemon interrupted.");
+                Thread.currentThread().interrupt();
+            } catch (IOException e) { }
+        });
+
+        shutdownWatcher.setDaemon(true); // Ensure it doesn't block JVM shutdown
+        shutdownWatcher.setName("ShutdownDaemon");
+        shutdownWatcher.start();
+
+        log.Write(LogLevel.INFO, "Shutdown daemon initialized and monitoring for SIGTERM file.");
+    }
+    
+    private static void shutdown() throws IOException {
+    	log.Write(LogLevel.INFO, "Shutdown signal received, attempting to shut down gracefully!");
+    	Files.deleteIfExists(Paths.get("SIGTERM"));
+    	Runtime.getRuntime().exit(0);
     }
     
     private static LocalDateTime dispatcher() throws Exception {
